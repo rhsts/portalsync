@@ -1,0 +1,14 @@
+# Personal data: figure dumps, logs, window settings
+dumps/
+*.log
+settings.json
+# Build output (PortalBridge.exe and portal_hide.dll are on the Releases page)
+__pycache__/
+build/
+dist/
+*.spec
+*.exe
+*.dll
+*.obj
+*.exp
+*.lib
