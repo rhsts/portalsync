@@ -17,7 +17,7 @@ Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on 
 - **Unplugging is safe.** Figures on the virtual portal stay loaded while the real portal is away, and saves made meanwhile are written when it comes back.
 - **Add Skylander window** with a search box, no file explorer needed:
   - **Your Skylanders** lists every figure you have played. Load its current copy or its backup (a backup is loaded as a copy, so the backup itself never changes).
-  - **All Skylanders** lists all 517 figures. **Create new figure** makes a blank one, fresh out of the box, the way Dolphin and RPCS3 create figures. It works without a real portal.
+  - **All Skylanders** lists all 548 figures, the 31 Imaginators Senseis included. **Create new figure** makes a blank one, fresh out of the box, the way Dolphin and RPCS3 create figures. It works without a real portal.
   - **Browse files…** still loads any `.sky` file from elsewhere.
 
 ![The Add Skylander window](docs/add.png)
@@ -101,7 +101,7 @@ It prints `ok`. The tests use fake portals and a loopback USB/IP client, so no h
 | `portal_bridge.py` | The program: USB/IP server, portal logic, window. |
 | `portal_hide.c` | Source of `portal_hide.dll`. |
 | `portal_descriptors.json` | USB descriptors of a real portal, which the virtual portal copies. Recreate them from your own portal with `python portal_bridge.py capture`. |
-| `figure_names.json` | Figure IDs and names (517 figures), generated from Dolphin's Skylander list. Imaginators figures are not in it. |
+| `figure_names.json` | Figure IDs and names (548 figures): Dolphin's Skylander list plus the 31 Imaginators Senseis from Cemu's and RPCS3's lists. Creation Crystals are not in it; neither emulator lists them. |
 | `test_portal_bridge.py` | Tests. |
 | `portal.ico` | Icon. |
 

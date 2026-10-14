@@ -1259,6 +1259,28 @@ def watch_emulators():
         time.sleep(1)
 
 
+def take_foreground(hwnd):
+    """Bring a window in front of a fullscreen game. Topmost alone is not enough: Windows keeps a background
+    program from taking the foreground, and a fullscreen game (Cemu's borderless Vulkan window, 2026-10-14)
+    then stays in front. Sharing the game's input queue for a moment lets SetForegroundWindow through."""
+    u, k, P = ctypes.windll.user32, ctypes.windll.kernel32, ctypes.c_void_p
+    u.GetForegroundWindow.restype = P
+    u.GetWindowThreadProcessId.argtypes = (P, P)
+    u.SetForegroundWindow.argtypes = u.BringWindowToTop.argtypes = (P,)
+    u.SetWindowPos.argtypes = (P, P, *[ctypes.c_int] * 4, ctypes.c_uint)
+    front = u.GetWindowThreadProcessId(u.GetForegroundWindow(), None)
+    me = k.GetCurrentThreadId()
+    attached = front and front != me and u.AttachThreadInput(me, front, True)
+    try:
+        u.SetWindowPos(hwnd, ctypes.c_void_p(-1), 0, 0, 0, 0, 0x1 | 0x2 | 0x40)  # HWND_TOPMOST, NOSIZE|NOMOVE|SHOWWINDOW
+        u.BringWindowToTop(hwnd)
+        u.SetForegroundWindow(hwnd)
+    finally:
+        if attached:
+            u.AttachThreadInput(me, front, False)
+    return u.GetForegroundWindow() == hwnd
+
+
 def usbip(*args):
     r = subprocess.run([USBIP_EXE, *args], capture_output=True, text=True,
                        creationflags=subprocess.CREATE_NO_WINDOW)
@@ -1606,11 +1628,20 @@ class App:
     def raise_dialog(self):
         d = self.dialog
         d.update_idletasks()
-        if not d.winfo_viewable():  # first show: centre on the screen, the main window may be hidden
+        if not hasattr(d, 'centred'):  # first show: centre on the screen, the main window may be hidden
+            d.centred = True
             d.geometry(f'+{(d.winfo_screenwidth() - d.winfo_reqwidth()) // 2}'
                        f'+{(d.winfo_screenheight() - d.winfo_reqheight()) // 3}')
         d.deiconify()
         d.lift()
+        d.update_idletasks()
+        hwnd = int(d.wm_frame(), 16)
+        ctypes.windll.user32.GetForegroundWindow.restype = ctypes.c_void_p
+        game = ctypes.windll.user32.GetForegroundWindow()
+        if game and game != hwnd and not hasattr(d, 'back_to'):  # the game gets the focus back when it closes
+            d.back_to = game
+            d.bind('<Destroy>', lambda e: e.widget is d and take_foreground(d.back_to))
+        take_foreground(hwnd)
         d.focus_force()
         d.bell()
 
