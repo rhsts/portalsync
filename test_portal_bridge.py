@@ -327,6 +327,34 @@ def lifted_mid_write():
         assert not [f for f in os.listdir(d) if ' - saved ' in f]
 
 
+def creating():
+    """New blank figures (Add Skylander → All Skylanders) and the list of figures already played."""
+    assert pb.crc16(b'123456789') == 0x29B1  # CRC-16/CCITT-FALSE check value
+    with tempfile.TemporaryDirectory() as d:
+        pb.DUMPS = d
+        f = pb.new_figure(25, 0)
+        assert len(f) == 1024 and pb.figure_name(f) == 'Zook'
+        assert int.from_bytes(f[0x1E:0x20], 'little') == pb.crc16(f[:0x1E])
+        assert f[4] == f[0] ^ f[1] ^ f[2] ^ f[3] and f[5:8] == b'\x81\x01\x0f'
+        assert f[48:64] == bytes(6) + bytes.fromhex('0f0f0f69') + bytes(6)  # keys zero, as the real portal reads them
+        assert all(f[s * 64 + 48:s * 64 + 64] == bytes(6) + bytes.fromhex('7f0f0869') + bytes(6) for s in range(1, 16))
+        assert all(not any(f[b * 16:b * 16 + 16]) for b in range(2, 64) if b % 4 != 3)  # empty save area
+
+        def touch(name, when):
+            path = os.path.join(d, name)
+            open(path, 'wb').write(bytes(1024))
+            os.utime(path, (when, when))
+        touch('Zook (86bc1263) - current.sky', 200)
+        touch('Zook (86bc1263) - original.sky', 50)
+        touch('Zook (86bc1263) - saved 2026-10-10 12.57.04.sky', 100)
+        touch('Zook (86bc1263) - loaded copy.sky', 150)
+        touch('Kaos (9f697a0a) - current.sky', 300)
+        touch('notes.txt', 400)
+        found = pb.played()
+        assert [e[1] for e in found] == ['9f697a0a', '86bc1263'] and found[0][3] is None
+        assert found[1][2].endswith('Zook (86bc1263) - current.sky') and found[1][3].endswith('saved 2026-10-10 12.57.04.sky')
+
+
 def game_first():
     """Busy real portal while an emulator runs: its game booted before the bridge. Say what to do."""
     m = pb.Mirror(Server(Portal(DESC.r_reply), DESC), vhci_bus=3)
@@ -422,6 +450,7 @@ def main():
     sound()
     speaker()
     lifted_mid_write()
+    creating()
     game_first()
     contention()
     file_trouble()

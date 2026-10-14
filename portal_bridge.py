@@ -30,6 +30,8 @@ Write-back (checkbox, on by default, choice kept in settings.json): game saves t
 figure while it sits on the real portal, data blocks only, each verified by reading it back.
 Restore (button; the pop-up also opens by itself when a "saved" copy is made): writes a figure's
 backup onto it the same way; what the figure held becomes its backup ("before restore").
+Add Skylander (button): search the figures in dumps/ and load one's current copy or backup, or create
+a new blank figure of any Skylander in figure_names.json (as Dolphin's "Create Skylander" does).
 
 Portal sound (Trap Team's villain and trap sounds): played on the real Traptanium portal's speaker,
 or on the PC's default audio device when there is none or the portal is away, see PortalSound.
@@ -146,6 +148,51 @@ def backups(uid=None):
 
 def has_backup(uid):
     return bool(backups(uid))
+
+
+DUMP_NAME = re.compile(r'(.+) \(([0-9a-f]{8})\) - (.+)\.sky')
+
+
+def played():
+    """Every figure in dumps/, newest played first: (name, uid, current path or None, newest backup or
+    None, time last played). From file names only."""
+    found, saved = {}, backups()
+    for name in os.listdir(DUMPS) if os.path.isdir(DUMPS) else []:
+        m = DUMP_NAME.fullmatch(name)
+        if m:
+            entry = found.setdefault(m[2], [m[1], m[2], None, (saved.get(m[2]) or [None])[-1], 0])
+            path = os.path.join(DUMPS, name)
+            if m[3] == 'current':
+                entry[2] = path
+            entry[4] = max(entry[4], os.path.getmtime(path))
+    return sorted(map(tuple, found.values()), key=lambda e: -e[4])
+
+
+def crc16(data):
+    """CRC16-CCITT (init 0xFFFF, poly 0x1021): the header checksum a figure keeps at 0x1E over bytes 0x00-0x1D."""
+    crc = 0xFFFF
+    for b in data:
+        crc ^= b << 8
+        for _ in range(8):
+            crc = (crc << 1 ^ 0x1021 if crc & 0x8000 else crc << 1) & 0xFFFF
+    return crc
+
+
+def new_figure(fid, var):
+    """A blank figure, fresh out of the box, as Dolphin's SkylanderFigure::Create makes it: random UID,
+    character id and variant, header checksum, sector trailer access bytes. Keys stay zero: the real
+    portal reads them as zero too (checked on the user's figures, 2026-10-14)."""
+    taken = {e[1] for e in played()}
+    while (uid := os.urandom(4)).hex() in taken:
+        pass
+    data = bytearray(1024)
+    data[0:8] = uid + bytes([uid[0] ^ uid[1] ^ uid[2] ^ uid[3], 0x81, 0x01, 0x0F])  # UID, BCC, ATQA, SAK
+    struct.pack_into('<H', data, 0x10, fid)
+    struct.pack_into('<H', data, 0x1C, var)
+    struct.pack_into('<H', data, 0x1E, crc16(data[:0x1E]))
+    for sector in range(16):
+        data[sector * 64 + 54:sector * 64 + 58] = bytes.fromhex('0f0f0f69' if sector == 0 else '7f0f0869')
+    return bytes(data)
 
 
 def recycle(path):
@@ -1275,7 +1322,7 @@ class App:
         if mirror:
             ttk.Button(top, text='Restore saved progress…', command=self.open_restore).pack(side='right')
         ttk.Button(top, text='Unload', command=self.unload_selected).pack(side='right', padx=(0, 8))
-        ttk.Button(top, text='Load .sky…', command=self.ask_load).pack(side='right', padx=(0, 8))
+        ttk.Button(top, text='Add Skylander…', command=self.open_picker).pack(side='right', padx=(0, 8))
 
         cols = (('slot', 'SLOT', 60), ('figure', 'FIGURE', 190), ('source', 'SOURCE', 170), ('file', 'FILE', 260))
         table = ttk.Frame(portal, style='Card.TFrame')
@@ -1332,8 +1379,9 @@ class App:
         s.configure('TButton', padding=(14, 5), bordercolor='#d1d1d1', **flat('#fbfbfb'))
         s.map('TButton', **{k: [('pressed', '#ededed'), ('active', '#f5f5f5')] for k in flat('')})
         s.configure('Accent.TButton', foreground='white', bordercolor=A, **flat(A))
-        s.map('Accent.TButton', bordercolor=[('pressed', self.ACCENT_DOWN), ('active', self.ACCENT_HOVER)],
-              **{k: [('pressed', self.ACCENT_DOWN), ('active', self.ACCENT_HOVER)] for k in flat('')})
+        accent_states = [('disabled', '#e0e0e0'), ('pressed', self.ACCENT_DOWN), ('active', self.ACCENT_HOVER)]
+        s.map('Accent.TButton', foreground=[('disabled', '#9a9a9a')],
+              **{k: accent_states for k in ('bordercolor', *flat(''))})
         self.box = round(line * 1.15)  # Windows 11 checkbox: clam's own is a tiny box with an X
         self.box_images = [self.checkbox(self.box, on, hover) for on in (False, True) for hover in (False, True)]
         off, off_hover, on, on_hover = self.box_images
@@ -1352,6 +1400,14 @@ class App:
         s.layout('Treeview', [('Treeview.treearea', {'sticky': 'nswe'})])  # no frame around the rows
         s.configure('TScrollbar', arrowcolor=self.MUTED, bordercolor=C, gripcount=0, arrowsize=12, **flat('#e0e0e0'))
         s.map('TScrollbar', **{k: [('active', '#cfcfcf')] for k in flat('')})
+        s.configure('Search.TEntry', fieldbackground=C, bordercolor='#c8c8c8', lightcolor=C, darkcolor=C, padding=(10, 7))
+        s.map('Search.TEntry', bordercolor=[('focus', A)], lightcolor=[('focus', A)])
+        s.configure('Hint.TLabel', background=C, foreground='#8a8a8a', font=('Segoe UI', 11))
+        s.layout('Tab.TRadiobutton', [('Radiobutton.padding', {'sticky': 'nswe', 'children': [
+            ('Radiobutton.label', {'sticky': 'nswe'})]})])
+        s.configure('Tab.TRadiobutton', background=C, foreground=self.MUTED, padding=(12, 8), font=('Segoe UI', 10))
+        s.map('Tab.TRadiobutton', foreground=[('selected', A), ('active', self.TEXT)],
+              font=[('selected', ('Segoe UI Semibold', 10))], background=[('active', '#f5f5f5'), ('selected', C)])
 
     def checkbox(self, n, on, hover):
         """An n x n antialiased checkbox image on the card colour: rounded box, white tick when on."""
@@ -1623,6 +1679,161 @@ class App:
         from tkinter import filedialog
         for p in filedialog.askopenfilenames(initialdir=DUMPS, filetypes=[('Skylander dumps', '*.sky'), ('All files', '*.*')]):
             self.load(p)
+
+    def open_picker(self):
+        """In-app window to add a figure: the figures in dumps/ (current copy or backup) or a new blank
+        figure of any Skylander in figure_names.json. The file explorer is only behind "Browse files…"."""
+        import tkinter as tk
+        from tkinter import ttk
+        if getattr(self, 'picker', None) is not None and self.picker.winfo_exists():
+            return self.picker.lift()
+        self.yours = {e[1]: e for e in played()}
+        p = self.picker = tk.Toplevel(self.root)
+        p.title('Add a Skylander')
+        p.configure(background=self.CARD)
+        p.transient(self.root)
+        p.minsize(640, 480)
+        body = ttk.Frame(p, style='Card.TFrame', padding=(22, 18, 22, 14))
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text='Add a Skylander', style='Section.TLabel').pack(anchor='w')
+
+        self.query = tk.StringVar()
+        box = ttk.Frame(body, style='Card.TFrame')
+        box.pack(fill='x', pady=(12, 10))
+        search = ttk.Entry(box, textvariable=self.query, style='Search.TEntry', font=('Segoe UI', 11))
+        search.pack(fill='x')
+        hint = ttk.Label(box, text='Search Skylanders', style='Hint.TLabel')
+        hint.place(x=12, rely=0.5, anchor='w')
+        hint.bind('<Button-1>', lambda e: search.focus_set())
+
+        def typed(*_):
+            if self.query.get():
+                hint.place_forget()
+            else:
+                hint.place(x=12, rely=0.5, anchor='w')
+            self.fill_picker()
+        self.query.trace_add('write', typed)
+
+        self.tab = tk.StringVar(value='yours' if self.yours else 'all')
+        tabs = ttk.Frame(body, style='Card.TFrame')
+        tabs.pack(fill='x')
+        self.tab_buttons = {}
+        for key in ('yours', 'all'):
+            self.tab_buttons[key] = ttk.Radiobutton(tabs, variable=self.tab, value=key, style='Tab.TRadiobutton',
+                                                    command=self.switch_tab)
+            self.tab_buttons[key].pack(side='left', padx=(0, 4))
+        tk.Frame(body, background=self.LINE, height=1).pack(fill='x')
+
+        table = ttk.Frame(body, style='Card.TFrame')
+        table.pack(fill='both', expand=True, pady=(6, 0))
+        self.lists = {}
+        for key, cols in (('yours', (('figure', 'FIGURE', 210), ('uid', 'ID', 90), ('played', 'LAST PLAYED', 130),
+                                     ('backup', 'BACKUP', 200))),
+                          ('all', (('figure', 'FIGURE', 380), ('kind', 'FIGURE ID', 200)))):
+            t = ttk.Treeview(table, columns=[c[0] for c in cols], show='headings', selectmode='browse')
+            for c, title, width in cols:
+                t.heading(c, text=title, anchor='w')
+                t.column(c, width=width, minwidth=60, anchor='w', stretch=c == 'figure')
+            t.tag_configure('odd', background='#fafafa')
+            t.tag_configure('loaded', foreground='#8a8a8a')
+            t.bind('<<TreeviewSelect>>', lambda e: self.picker_buttons())
+            t.bind('<Double-1>', lambda e: self.pick('current' if self.tab.get() == 'yours' else 'new'))
+            self.lists[key] = t
+        self.pick_scroll = ttk.Scrollbar(table)
+        self.pick_scroll.pack(side='right', fill='y')
+        self.nothing = ttk.Label(table, style='CardMuted.TLabel')
+
+        tk.Frame(p, background=self.LINE, height=1).pack(fill='x')
+        bar = ttk.Frame(p, padding=(22, 12))
+        bar.pack(fill='x')
+        ttk.Button(bar, text='Browse files…', command=lambda: (p.destroy(), self.ask_load())).pack(side='left')
+        self.actions = {'yours': ttk.Frame(bar), 'all': ttk.Frame(bar)}
+        self.pick_current = ttk.Button(self.actions['yours'], text='Load current', style='Accent.TButton',
+                                       command=lambda: self.pick('current'))
+        self.pick_current.pack(side='right')
+        self.pick_backup = ttk.Button(self.actions['yours'], text='Load backup', command=lambda: self.pick('backup'))
+        self.pick_backup.pack(side='right', padx=(0, 8))
+        self.pick_new = ttk.Button(self.actions['all'], text='Create new figure', style='Accent.TButton',
+                                   command=lambda: self.pick('new'))
+        self.pick_new.pack(side='right')
+        p.bind('<Return>', lambda e: self.pick('current' if self.tab.get() == 'yours' else 'new'))
+        p.bind('<Escape>', lambda e: p.destroy())
+        self.switch_tab()
+        w, h = 780, 600
+        p.geometry(f'{w}x{h}+{self.root.winfo_rootx() + (self.root.winfo_width() - w) // 2}'
+                   f'+{self.root.winfo_rooty() + max(0, (self.root.winfo_height() - h) // 3)}')
+        search.focus_set()
+
+    def switch_tab(self):
+        for key, t in self.lists.items():
+            t.pack_forget()
+            self.actions[key].pack_forget()
+        t = self.lists[self.tab.get()]
+        t.pack(side='left', fill='both', expand=True)
+        t.configure(yscrollcommand=self.pick_scroll.set)
+        self.pick_scroll.configure(command=t.yview)
+        self.actions[self.tab.get()].pack(side='right')
+        self.fill_picker()
+
+    def fill_picker(self):
+        q = self.query.get().strip().lower()
+        with self.server.cv:
+            loaded = {bytes(s.data[:4]).hex() for s in self.portal.slots if s.path}
+        if self.tab.get() == 'yours':
+            rows = []
+            for name, uid, current, backup, when in self.yours.values():
+                kind = os.path.basename(backup)[:-4].split(') - ', 1)[1] if backup else 'none'
+                kind = re.sub(r'(\d\d)\.(\d\d)\.\d\d(-\d+)?$', r'\1:\2', kind)  # 'saved 2026-10-11 13:12'
+                rows.append((uid, (name + (' (on the portal)' if uid in loaded else ''), uid,
+                                   time.strftime('%Y-%m-%d %H:%M', time.localtime(when)), kind), uid in loaded))
+        else:
+            rows = [(key, (name, 'id {} · variant {}'.format(*key.split(':'))), False)
+                    for key, name in sorted(NAMES.items(), key=lambda kv: kv[1].lower())]
+        shown = [r for r in rows if not q or q in r[1][0].lower() or q in r[0]]
+        t = self.lists[self.tab.get()]
+        t.delete(*t.get_children())
+        for n, (iid, values, on) in enumerate(shown):
+            t.insert('', 'end', iid=iid, values=values, tags=(('odd',) if n % 2 else ()) + (('loaded',) if on else ()))
+        if shown:
+            t.selection_set(shown[0][0])
+            self.nothing.place_forget()
+        else:
+            self.nothing.configure(text=f"No Skylander matches '{self.query.get().strip()}'." if q else
+                                   'No figures yet. Place one on the real portal, or create one under All Skylanders.')
+            self.nothing.place(relx=0.5, rely=0.4, anchor='center')
+        self.tab_buttons['yours'].configure(text=f'Your Skylanders ({len(self.yours)})')
+        self.tab_buttons['all'].configure(text=f'All Skylanders ({len(NAMES)})')
+        self.picker_buttons()
+
+    def picker_buttons(self):
+        sel = self.lists[self.tab.get()].selection()
+        e = self.yours.get(sel[0]) if sel and self.tab.get() == 'yours' else None
+        on = e is not None and 'loaded' in self.lists['yours'].item(e[1], 'tags')
+        self.pick_current.state(['!disabled'] if e and e[2] and not on else ['disabled'])
+        self.pick_backup.state(['!disabled'] if e and e[3] and not on else ['disabled'])
+        self.pick_new.state(['!disabled'] if sel and self.tab.get() == 'all' else ['disabled'])
+
+    def pick(self, what):
+        sel = self.lists[self.tab.get()].selection()
+        if not sel:
+            return
+        if what == 'new':
+            fid, var = map(int, sel[0].split(':'))
+            data = new_figure(fid, var)
+            path = dump_path(data, 'current')
+            try:
+                os.makedirs(DUMPS, exist_ok=True)
+                save_dump(path, data)
+            except OSError as e:
+                return self.say(f'Not created: {e}')
+            log(f'created new figure {figure_name(data)} ({data[:4].hex()})')
+        else:
+            e = self.yours[sel[0]]
+            path = e[2] if what == 'current' else e[3]
+            if not path or 'loaded' in self.lists['yours'].item(sel[0], 'tags'):
+                return
+        self.picker.destroy()
+        self.load(path)
 
     def unload_selected(self):
         for n in map(int, self.tree.selection()):

@@ -15,7 +15,12 @@ Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on 
 - **Trap Team sound** plays on the Traptanium Portal's own speaker, or on the PC speakers when no Traptanium Portal is connected.
 - **Portal lights** follow the game.
 - **Unplugging is safe.** Figures on the virtual portal stay loaded while the real portal is away, and saves made meanwhile are written when it comes back.
-- **Load `.sky` files** onto the virtual portal without a real portal.
+- **Add Skylander window** with a search box, no file explorer needed:
+  - **Your Skylanders** lists every figure you have played. Load its current copy or its backup (a backup is loaded as a copy, so the backup itself never changes).
+  - **All Skylanders** lists all 517 figures. **Create new figure** makes a blank one, fresh out of the box, the way Dolphin and RPCS3 create figures. It works without a real portal.
+  - **Browse files…** still loads any `.sky` file from elsewhere.
+
+![The Add Skylander window](docs/add.png)
 
 ![The restore pop-up](docs/restore.png)
 
