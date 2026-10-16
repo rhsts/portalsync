@@ -1709,6 +1709,7 @@ class App:
                         'Kept (real portal unplugged)' if n in kept else 'File', os.path.basename(s.path))
                     for n, s in enumerate(self.portal.slots) if s.path}
         if rows != self.rows:
+            self.fit_columns(self.tree, list(rows.values()), self.root, extra=70)
             picked = self.tree.selection()
             self.tree.delete(*self.tree.get_children())
             for k, (n, values) in enumerate(rows.items()):
@@ -2032,8 +2033,9 @@ class App:
         table = ttk.Frame(body, style='Card.TFrame')
         table.pack(fill='both', expand=True, pady=(6, 0))
         self.lists = {}
-        for key, cols in (('yours', (('figure', 'FIGURE', 220), ('level', 'LEVEL', 60), ('gold', 'GOLD', 70),
-                                     ('uid', 'ID', 85), ('played', 'LAST PLAYED', 125), ('backup', 'BACKUP', 185))),
+        for key, cols in (('yours', (('figure', 'FIGURE', 200), ('villain', 'VILLAIN', 120), ('level', 'LEVEL', 55),
+                                     ('gold', 'GOLD', 70), ('uid', 'ID', 85), ('played', 'LAST PLAYED', 125),
+                                     ('backup', 'BACKUP', 170))),
                           ('all', (('figure', 'FIGURE', 380), ('kind', 'FIGURE ID', 200)))):
             t = ttk.Treeview(table, columns=[c[0] for c in cols], show='headings', selectmode='browse')
             for c, title, width in cols:
@@ -2065,11 +2067,28 @@ class App:
         p.bind('<Return>', lambda e: self.pick('current' if self.tab.get() == 'yours' else 'new'))
         p.bind('<Escape>', lambda e: p.destroy())
         self.switch_tab()
-        w, h, sw, sh = 780, 600, p.winfo_screenwidth(), p.winfo_screenheight()
+        sw, sh = p.winfo_screenwidth(), p.winfo_screenheight()
+        w, h = min(max(780, p.winfo_reqwidth()), sw - 40), 600  # wide enough for the fitted columns
         x = self.root.winfo_rootx() + (self.root.winfo_width() - w) // 2  # centred over the main window,
         y = self.root.winfo_rooty() + max(0, (self.root.winfo_height() - h) // 3)
         p.geometry(f'{w}x{h}+{min(max(0, x), sw - w)}+{min(max(0, y), sh - h)}')  # but on the screen
         search.focus_set()
+
+    def fit_columns(self, tree, rows, window, extra):
+        """Size each column to its widest text (heading included), so nothing is cut off, and widen the
+        window when the columns need more room (up to the screen). extra: the window's own margins."""
+        from tkinter import font
+        body, head = font.nametofont('TkDefaultFont'), font.Font(family='Segoe UI Semibold', size=9)
+        total = 0
+        for k, col in enumerate(tree['columns']):
+            w = max([head.measure(tree.heading(col, 'text'))] + [body.measure(str(r[k])) for r in rows]) + 24
+            tree.column(col, width=w, minwidth=w)
+            total += w
+        window.update_idletasks()
+        need = min(total + extra, window.winfo_screenwidth() - 40)
+        if window.winfo_width() < need:
+            x = max(0, min(window.winfo_x() - (need - window.winfo_width()) // 2, window.winfo_screenwidth() - need))
+            window.geometry(f'{need}x{window.winfo_height()}+{x}+{window.winfo_y()}')
 
     def switch_tab(self):
         for key, t in self.lists.items():
@@ -2093,9 +2112,8 @@ class App:
                 kind = re.sub(r'(\d\d)\.(\d\d)\.\d\d(-\d+)?$', r'\1:\2', kind)  # 'saved 2026-10-11 13:12'
                 info, backup_bad = self.health[uid]
                 label = name + (f' "{info.nickname}"' if info and info.nickname else '')
-                label += f' · {info.villains[0]}' if info and info.villains else ''
                 label += ' (damaged save)' if info and info.damaged else ' (on the portal)' if uid in loaded else ''
-                rows.append((uid, (label, info.level if info and info.level else '', f'{info.gold:,}' if info and info.gold is not None else '',
+                rows.append((uid, (label, info.villains[0] if info and info.villains else '', info.level if info and info.level else '', f'{info.gold:,}' if info and info.gold is not None else '',
                                    uid, time.strftime('%Y-%m-%d %H:%M', time.localtime(when)),
                                    kind + (' (damaged)' if backup_bad else '')), uid in loaded))
         else:
@@ -2103,6 +2121,9 @@ class App:
                     for key, name in sorted(NAMES.items(), key=lambda kv: kv[1].lower())]
         shown = [r for r in rows if not q or q in r[1][0].lower() or q in r[0]]
         t = self.lists[self.tab.get()]
+        if not getattr(t, 'fitted', False):
+            t.fitted = True
+            self.fit_columns(t, [r[1] for r in rows], self.picker, extra=60)
         t.delete(*t.get_children())
         for n, (iid, values, on) in enumerate(shown):
             info = self.health.get(iid, (None,))[0] if self.tab.get() == 'yours' else None
