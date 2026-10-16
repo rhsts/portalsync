@@ -441,7 +441,92 @@ def injection():
     assert child.wait(10) == 0
 
 
+def saved_figure(uid, level_xp=(33000, 10203), gold=1234, nickname='raf'):
+    """An encrypted figure image with one valid save area, as a game writes it (Zook, id 25)."""
+    d = bytearray(pb.new_figure(25, 0))
+    d[0:4] = bytes.fromhex(uid)
+    d[4] = d[0] ^ d[1] ^ d[2] ^ d[3]
+    struct.pack_into('<H', d, 0x1E, pb.crc16(d[:0x1E]))
+    a = 0x80
+    d[a:a + 3] = level_xp[0].to_bytes(3, 'little')
+    struct.pack_into('<H', d, a + 3, gold)
+    d[a + 9] = 1  # area counter
+    d[a + 0x20:a + 0x20 + 2 * len(nickname)] = nickname.encode('utf-16-le')
+    struct.pack_into('<H', d, 0x110 + 3, level_xp[1])
+    d[0x112] = 1
+    (_, t1), (_, t2), (_, t3) = pb.area_checksums(d, a)
+    struct.pack_into('<HH', d, a + 0x0A, t3, t2)
+    struct.pack_into('<H', d, a + 0x0E, pb.area_checksums(d, a)[0][1])  # type 1 covers types 2 and 3
+    return pb.crypt(bytes(d), encrypt=True)
+
+
+def reading(figure_info):
+    """Level, gold and nickname from a figure's encrypted save, and damaged saves never offered or written."""
+    pb.figure_info = figure_info
+    with tempfile.TemporaryDirectory() as d:
+        pb.DUMPS = d
+        trash = fake_bin(d)
+        good = saved_figure('1a2b3c4d')
+        assert pb.crypt(pb.crypt(good, encrypt=True)) == good  # round trip
+        info = pb.figure_info(good)
+        assert (info.kind, info.level, info.gold, info.nickname, info.damaged) == ('skylander', 11, 1234, 'raf', False)
+        assert [pb.figure_info(saved_figure('1a2b3c4d', (xp, 0))).level for xp in (0, 999, 1000, 32999, 33000)] == [1, 1, 2, 9, 10]
+        assert pb.figure_info(saved_figure('1a2b3c4d', (33000, 63500))).level == 15
+        broken = bytearray(good)
+        broken[0xD0] ^= 1  # a byte in block 13, covered by checksum type 3
+        assert pb.figure_info(bytes(broken)).damaged
+        trap = bytearray(broken)
+        struct.pack_into('<H', trap, 0x10, 210)
+        assert pb.figure_info(bytes(trap)).kind == 'trap' and not pb.figure_info(bytes(trap)).damaged  # traps: no save checks
+        assert pb.figure_info(pb.new_figure(25, 0)).kind == 'new'
+        t = bytearray(pb.new_figure(212, 0x3006))  # an Air trap: Bad Juju trapped last, Buzzer Beak before
+        t[0x81], t[0x89], t[0x90], t[0xD0] = 2, 1, 37, 12
+        info = pb.figure_info(pb.crypt(bytes(t), encrypt=True))
+        assert info.kind == 'trap' and info.villains == ['Bad Juju', 'Buzzer Beak'] and pb.stats(info) == ' · holds Bad Juju'
+        assert pb.figure_info(pb.new_figure(212, 0x3006)).villains == []  # empty trap
+
+        # backups: the newest intact one is kept
+        old, new = os.path.join(d, 'Zook (1a2b3c4d) - original.sky'), os.path.join(d, 'Zook (1a2b3c4d) - saved 2026-10-16 10.00.00.sky')
+        pb.save_dump(old, good)
+        pb.save_dump(new, bytes(broken))
+        pb.keep_one_backup('1a2b3c4d')
+        assert os.path.exists(old) and os.listdir(trash) == [os.path.basename(new)]
+
+        # a damaged figure placed: its intact backup that differs is offered
+        server = Server(Portal(DESC.r_reply), DESC)
+        m = pb.Mirror(server, vhci_bus=3)
+        pb.save_dump(old, saved_figure('1a2b3c4d', gold=999))
+        m.real = FakeReal({0: bytearray(broken)})
+        m.poll()
+        assert m.offers.get_nowait() == old and m.notices.empty()
+        # no intact backup: a pop-up says so
+        other = bytearray(broken)
+        other[0:4] = bytes.fromhex('5e6f7a8b')
+        m.real.figures = {0: bytearray(broken), 1: other}
+        m.poll()
+        assert m.offers.empty() and 'damaged' in m.notices.get_nowait()
+
+        # reset: the save blocks become empty, header and trailers stay, what the figure held is the backup
+        zook = saved_figure('86bc1263')
+        pb.save_dump(os.path.join(d, 'Zook (86bc1263) - original.sky'), zook)
+        m.real.figures = {2: bytearray(zook)}
+        m.poll()
+        m.reset('86bc1263')
+        m.poll()
+        fig = bytes(m.real.figures[2])
+        assert fig[:128] == zook[:128] and pb.figure_info(fig).kind == 'new'
+        assert all(fig[b * 16:b * 16 + 16] == (zook[b * 16:b * 16 + 16] if b % 4 == 3 else bytes(16)) for b in range(8, 64))
+        undo = [f for f in os.listdir(d) if f.startswith('Zook (86bc1263) - before restore')]
+        assert len(undo) == 1 and open(os.path.join(d, undo[0]), 'rb').read() == zook
+
+    assert pb.newer('v1.3.0', '1.2.0') and pb.newer('v1.10.0', '1.9.9') and not pb.newer('v1.2.0', '1.2.0')
+    assert not pb.newer('v1.1.1', '1.2.0') and not pb.newer('nightly', '1.2.0')
+
+
 def main():
+    reading(pb.figure_info)
+    pb.figure_info = lambda data: SimpleNamespace(kind='other', level=None, gold=None, nickname='', damaged=False,
+                                                  old_damaged=False)  # the other tests' saves are made-up bytes
     names()
     one_backup()
     files()

@@ -12,6 +12,11 @@ Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on 
 - **Game saves go back to your figures** ("Write saves to real figures", on by default). Only data blocks are written, and every block is read back to check it.
 - **Backups of every figure** in the `dumps` folder, named after the character, for example `Zook (86bc1263) - original.sky`. Each figure keeps one backup, its newest. An older backup goes to the Recycle Bin, never straight to deletion.
 - **Restore saved progress.** If a figure's saved copy has progress the figure lacks, a pop-up offers to write it to the figure, one figure at a time. What the figure held before is kept as its backup, so a restore can be undone.
+- **Figure data.** Each figure's save is decrypted to show its level, gold and nickname in the Add Skylander list and the restore pop-up. For a Trap Team trap, it shows the villain inside (for example *Air Jughead · Bad Juju*).
+- **Damaged saves are caught.** When a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". Portal Bridge warns you as soon as such a figure is placed and offers its last intact backup. A damaged copy is never offered, written to a figure, or kept in place of an intact backup.
+- **Reset figure.** Select a figure from the real portal and click **Reset figure…** to erase its progress, like a toy fresh out of the box. What it held is kept as its backup, so **Restore progress…** can undo it.
+- **Drag and drop** `.sky` files onto the window to load them.
+- **Update check.** At start Portal Bridge looks up the latest release on GitHub, and shows a link in the window when there is a newer version.
 - **Trap Team sound** plays on the Traptanium Portal's own speaker, or on the PC speakers when no Traptanium Portal is connected.
 - **Portal lights** follow the game.
 - **Unplugging is safe.** Figures on the virtual portal stay loaded while the real portal is away, and saves made meanwhile are written when it comes back.
