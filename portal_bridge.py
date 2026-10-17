@@ -1,4 +1,4 @@
-"""portal-bridge: software Skylanders Portal of Power exported over USB/IP to usbip-win2.
+"""PortalSync (formerly Portal Bridge): software Skylanders Portal of Power exported over USB/IP to usbip-win2.
 Copyright (C) 2026 rhsts. SPDX-License-Identifier: GPL-2.0-or-later (see LICENSE).
 
   python portal_bridge.py capture         # real portal plugged in: save its descriptors + back up figures
@@ -69,15 +69,15 @@ import time
 from collections import deque
 from types import SimpleNamespace
 
-HERE = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))  # PortalBridge.exe: its folder
+HERE = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))  # PortalSync.exe: its folder
 DESC_FILE = os.path.join(HERE, 'portal_descriptors.json')
 DUMPS = os.path.join(HERE, 'dumps')
 SETTINGS = os.path.join(HERE, 'settings.json')  # choices made in the window, kept between runs
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
 USBIP_EXE = r'C:\Program Files\USBip\usbip.exe'
-VERSION = '1.4.0'  # compared with the latest GitHub release at start (latest_release)
-RELEASES = 'https://api.github.com/repos/rhsts/skylanders-portal-bridge/releases/latest'
+VERSION = '1.4.1'  # compared with the latest GitHub release at start (latest_release)
+RELEASES = 'https://api.github.com/repos/rhsts/portalsync/releases/latest'
 HIDE_DLL = os.path.join(HERE, 'portal_hide.dll')
 HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe'}  # emulators that get portal_hide.dll
 RUNNING_EMULATORS = {}  # pid -> exe name of the HIDE_FROM emulators running now (watch_emulators)
@@ -96,7 +96,7 @@ LOG_LOCK = threading.Lock()  # numbers stay in order across threads
 def log(*a):
     line = ' '.join([time.strftime('%H:%M:%S'), *map(str, a)])
     with LOG_LOCK:
-        if sys.stdout:  # None in PortalBridge.exe (no console)
+        if sys.stdout:  # None in PortalSync.exe (no console)
             print(line, flush=True)
         if LOG_FILE:
             print(line, file=LOG_FILE, flush=True)
@@ -1622,7 +1622,7 @@ def latest_release():
     """(tag, page url) of the latest GitHub release, or None when it can't be reached."""
     import urllib.request
     try:
-        req = urllib.request.Request(RELEASES, headers={'User-Agent': f'portal-bridge/{VERSION}'})
+        req = urllib.request.Request(RELEASES, headers={'User-Agent': f'PortalSync/{VERSION}'})
         with urllib.request.urlopen(req, timeout=10) as r:
             j = json.load(r)
         return j['tag_name'], j['html_url']
@@ -1840,7 +1840,7 @@ class App:
         if self.settings().get('dark'):
             self.__dict__.update(self.DARK)
         self.root = root = tk.Tk()
-        root.title('Portal Bridge')
+        root.title('PortalSync')
         root.configure(background=self.BG)
         root.minsize(760, 420)
         icon = tk.PhotoImage(width=32, height=32)  # a portal: blue ring, light centre
@@ -1863,7 +1863,7 @@ class App:
         header = ttk.Frame(root, style='Card.TFrame', padding=(22, 16))
         header.pack(fill='x')
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text='Portal Bridge', style='Title.TLabel').grid(row=0, column=0, sticky='w')
+        ttk.Label(header, text='PortalSync', style='Title.TLabel').grid(row=0, column=0, sticky='w')
         pill = ttk.Frame(header, style='Card.TFrame')
         pill.grid(row=0, column=1, rowspan=2, sticky='e')
         self.dot = ttk.Label(pill, text='●', style='Card.TLabel', font=('Segoe UI', 13))
@@ -2071,10 +2071,10 @@ class App:
             self.load(self.dropped.get_nowait())
         if self.new_version and self.new_version[0] and newer(self.new_version[0]) and not self.update_link.winfo_ismapped():
             tag, url = self.new_version
-            self.update_link.configure(text=f'Portal Bridge {tag.lstrip("v")} is available')
+            self.update_link.configure(text=f'PortalSync {tag.lstrip("v")} is available')
             self.update_link.bind('<Button-1>', lambda e: __import__('webbrowser').open(url))
             self.update_link.grid(row=2, column=0, columnspan=2, sticky='w', pady=(6, 0))
-            log(f'Portal Bridge {tag} is available (this is {VERSION}): {url}')
+            log(f'PortalSync {tag} is available (this is {VERSION}): {url}')
         if m:
             colour = next(c for key, c in self.STATE_COLOURS if key in m.state)
             self.dot.configure(foreground=colour)
@@ -2126,7 +2126,7 @@ class App:
         holder.geometry(f'1x1+{holder.winfo_screenwidth() // 2}+{holder.winfo_screenheight() // 3}')
         holder.update_idletasks()
         take_foreground(int(holder.wm_frame(), 16))
-        answer = (messagebox.askyesno if ask else messagebox.showwarning)('Portal Bridge', msg, parent=holder)
+        answer = (messagebox.askyesno if ask else messagebox.showwarning)('PortalSync', msg, parent=holder)
         holder.destroy()
         if game:
             take_foreground(game)
@@ -2135,7 +2135,7 @@ class App:
     @staticmethod
     def settings():
         try:
-            with open(SETTINGS) as f:
+            with open(SETTINGS, encoding='utf-8-sig') as f:  # also when saved by Notepad (BOM)
                 return json.load(f)
         except (OSError, ValueError):
             return {}
@@ -2679,7 +2679,7 @@ class App:
             folder = tk.StringVar(value=self.settings().get('dumps') or DUMPS)
             moving = lambda: os.path.normcase(os.path.normpath(folder.get() or DUMPS)) != os.path.normcase(DUMPS)
             r = label('Figures folder', help=lambda: 'Where your figure files are kept. ' + (
-                'Your files move to the new folder the next time Portal Bridge starts.' if moving() else
+                'Your files move to the new folder the next time PortalSync starts.' if moving() else
                 'Pick another folder (for example on OneDrive) and they move there on the next start.'))
 
             def set_folder(*_):
@@ -2838,12 +2838,12 @@ class App:
         import tkinter as tk
         from tkinter import ttk
         d = tk.Toplevel(self.root)
-        d.title('Welcome to Portal Bridge')
+        d.title('Welcome to PortalSync')
         d.configure(background=self.CARD)
         d.resizable(False, False)
         body = ttk.Frame(d, style='Card.TFrame', padding=(28, 22, 28, 8))
         body.pack(fill='both')
-        ttk.Label(body, text='Welcome to Portal Bridge', style='Title.TLabel').pack(anchor='w')
+        ttk.Label(body, text='Welcome to PortalSync', style='Title.TLabel').pack(anchor='w')
         ttk.Label(body, text='A few choices to start with. You can change them later in Settings.',
                   style='CardMuted.TLabel').pack(anchor='w', pady=(4, 0))
 
@@ -3148,7 +3148,7 @@ def main():
     try:  # first: a second copy must stop before it touches the running one's log or dumps
         listener = socket.create_server((HOST, TCP_PORT))
     except OSError:
-        raise SystemExit(f'Port {TCP_PORT} is in use. Is Portal Bridge already running?')
+        raise SystemExit(f'Port {TCP_PORT} is in use. Is PortalSync already running?')
     LOG_FILE = open(os.path.join(HERE, 'bridge.log'), 'w')
     global DUMPS, BACKUPS_KEPT
     prefs = App.settings()
@@ -3213,14 +3213,14 @@ def main():
 if __name__ == '__main__':
     try:
         capture() if sys.argv[1:] == ['capture'] else main()
-    except Exception as e:  # PortalBridge.exe has no console: say why it stopped instead of vanishing
+    except Exception as e:  # PortalSync.exe has no console: say why it stopped instead of vanishing
         import traceback
         log(traceback.format_exc())
         if not sys.stdout:
-            ctypes.windll.user32.MessageBoxW(None, f'Portal Bridge stopped:\n{e}\n\nDetails are in bridge.log.',
-                                             'Portal Bridge', 0x10)
+            ctypes.windll.user32.MessageBoxW(None, f'PortalSync stopped:\n{e}\n\nDetails are in bridge.log.',
+                                             'PortalSync', 0x10)
         raise
     except SystemExit as e:
         if isinstance(e.code, str) and not sys.stdout:
-            ctypes.windll.user32.MessageBoxW(None, f'Portal Bridge stopped: {e.code}', 'Portal Bridge', 0x10)
+            ctypes.windll.user32.MessageBoxW(None, f'PortalSync stopped: {e.code}', 'PortalSync', 0x10)
         raise

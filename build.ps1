@@ -22,9 +22,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'portal_hide.dll compilation failed.' }
 } finally { Pop-Location }
 
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name PortalBridge `
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name PortalSync `
     --icon "$PSScriptRoot/portal.ico" --collect-all libusb_package --hidden-import usb.backend.libusb1 `
     --distpath "$PSScriptRoot" --workpath "$WorkDirectory/pyinstaller" `
     --specpath "$WorkDirectory" "$PSScriptRoot/portal_bridge.py"
-if ($LASTEXITCODE -ne 0) { throw 'PortalBridge.exe build failed.' }
-Write-Output "Built $PSScriptRoot\PortalBridge.exe and portal_hide.dll"
+if ($LASTEXITCODE -ne 0) { throw 'PortalSync.exe build failed.' }
+Write-Output "Built $PSScriptRoot\PortalSync.exe and portal_hide.dll"

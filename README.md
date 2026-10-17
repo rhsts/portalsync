@@ -1,10 +1,12 @@
-# Skylanders Portal Bridge
+# PortalSync
+
+*Formerly Portal Bridge.*
 
 Use one real Skylanders Portal of Power with **Cemu** (Wii U), **RPCS3** (PS3) and **Dolphin** (Wii) on Windows.
 
-Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on the real portal is copied into the virtual portal, and the emulator talks only to the virtual one. The real portal can stay plugged in the whole time: a small DLL hides it from the emulators, so games never say "too many Portals".
+PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the real portal is copied into the virtual portal, and the emulator talks only to the virtual one. The real portal can stay plugged in the whole time: a small DLL hides it from the emulators, so games never say "too many Portals".
 
-![The Portal Bridge window](docs/window.png)
+![The PortalSync window](docs/window.png)
 
 ## Features
 
@@ -13,7 +15,7 @@ Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on 
 - **Backups of every figure** in the `dumps` folder, named after the character, for example `Zook (86bc1263) - original.sky`. Each figure keeps one backup, its newest. An older backup goes to the Recycle Bin, never straight to deletion.
 - **Restore saved progress.** If a figure's saved copy has progress the figure lacks, a pop-up offers to write it to the figure, one figure at a time. What the figure held before is kept as its backup, so a restore can be undone.
 - **Figure data.** Each figure's save is decrypted to show its level, gold and nickname in the Add Skylander list and the restore pop-up. For a Trap Team trap, it shows the villain inside (a Villain column in the Add Skylander list, for example Air Jughead: Bad Juju).
-- **Damaged saves are caught.** When a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". Portal Bridge warns you as soon as such a figure is placed and offers to repair it, keeping all its progress. A damaged copy is never offered, written to a figure, or kept in place of an intact backup.
+- **Damaged saves are caught.** When a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". PortalSync warns you as soon as such a figure is placed and offers to repair it, keeping all its progress. A damaged copy is never offered, written to a figure, or kept in place of an intact backup.
 - **Start game…** lists the Skylanders games your emulators know (Cemu's game paths, RPCS3's games.yml, Dolphin's ISO folders) and starts one with the bridge already running, so the real portal is hidden from the very start.
 - **Right-click a figure** in the slot table for Unload, Restore progress (that figure) and the actions below; the ones that write need a figure on the real portal. **Back up all figures…** (every figure into one zip) and **Restore progress…** (all figures) are on the **Settings…** page. Each action writes like a restore: what the figure held is kept as its backup, and every block is read back to check it.
   - **Edit gold, nickname, level…**: saved the way the game saves, with the previous save kept on the figure as its fallback.
@@ -30,7 +32,7 @@ Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on 
 - **Welcome window** on the first start: light or dark, write saves to figures, Trap portal sound, lights, update check and your emulators.
   - **All figures:** back up all figures to a zip; restore progress.
 - **Drag and drop** `.sky` files onto the window to load them.
-- **Update check.** At start Portal Bridge looks up the latest release on GitHub, and shows a link in the window when there is a newer version.
+- **Update check.** At start PortalSync looks up the latest release on GitHub, and shows a link in the window when there is a newer version.
 - **Saves are written safely.** A save that fails to reach the figure is tried up to three times. A newer save replaces an older retry, and the status line shows retries and failures; a failure also opens a pop-up. The progress is always in the figure's current `.sky` file. Turning write-back off cancels saves that are still waiting. Invalid block numbers and incomplete writes from the game are refused before anything reaches the portal. An empty, cut-off or unreadable backup never replaces an intact one.
 - **Trap Team sound** plays on the Traptanium Portal's own speaker, or on the PC speakers when no Traptanium Portal is connected.
 - **Portal lights** follow the game.
@@ -64,10 +66,10 @@ All of them were tested with a Traptanium Portal (USB ID `1430:0150`) on Windows
 
 ### The exe (easiest)
 
-1. Download the zip from the [latest release](../../releases/latest) and unzip it to a folder of its own. The folder holds `PortalBridge.exe`, `portal_hide.dll`, `portal_descriptors.json`, `figure_names.json` and `figure_details.json`; keep them together.
-2. Double-click `PortalBridge.exe`. Your figure dumps go to a `dumps` folder next to it.
+1. Download the zip from the [latest release](../../releases/latest) and unzip it to a folder of its own. The folder holds `PortalSync.exe`, `portal_hide.dll`, `portal_descriptors.json`, `figure_names.json` and `figure_details.json`; keep them together.
+2. Double-click `PortalSync.exe`. Your figure dumps go to a `dumps` folder next to it.
 
-Some antivirus programs distrust exes packed with PyInstaller, and programs that load a DLL into another process. Both are what Portal Bridge does, so it may be flagged. You can check the source here and build both files yourself.
+Some antivirus programs distrust exes packed with PyInstaller, and programs that load a DLL into another process. Both are what PortalSync does, so it may be flagged. You can check the source here and build both files yourself.
 
 ### From source
 
@@ -82,12 +84,12 @@ Python 3.13 was used. Build `portal_hide.dll` in an *x64 Native Tools Command Pr
 cl /nologo /O2 /LD portal_hide.c cfgmgr32.lib
 ```
 
-To build the exe and the DLL together, install PyInstaller alongside the requirements, then run `powershell -ExecutionPolicy Bypass -File build.ps1` (needs the Visual Studio C++ x64 build tools). It puts `PortalBridge.exe` and `portal_hide.dll` next to the source.
+To build the exe and the DLL together, install PyInstaller alongside the requirements, then run `powershell -ExecutionPolicy Bypass -File build.ps1` (needs the Visual Studio C++ x64 build tools). It puts `PortalSync.exe` and `portal_hide.dll` next to the source.
 
 ## Usage
 
 1. Plug in the real portal.
-2. Start Portal Bridge **before** the emulator boots a game.
+2. Start PortalSync **before** the emulator boots a game.
 3. Start the emulator and the game. The Activity log shows that the real portal is hidden from it.
 4. Place figures on the real portal. Each one appears in the game.
 

@@ -2,7 +2,7 @@
 dumps/
 *.log
 settings.json
-# Build output (PortalBridge.exe and portal_hide.dll are on the Releases page)
+# Build output (PortalSync.exe and portal_hide.dll are on the Releases page)
 __pycache__/
 build/
 dist/
