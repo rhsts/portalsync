@@ -25,6 +25,7 @@ Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on 
 - **Portal speaker volume** slider.
 - **Drag and drop** `.sky` files onto the window to load them.
 - **Update check.** At start Portal Bridge looks up the latest release on GitHub, and shows a link in the window when there is a newer version.
+- **Saves are written safely.** A save that fails to reach the figure is tried up to three times. A newer save replaces an older retry, and the status line shows retries and failures; a failure also opens a pop-up. The progress is always in the figure's current `.sky` file. Turning write-back off cancels saves that are still waiting. Invalid block numbers and incomplete writes from the game are refused before anything reaches the portal. An empty, cut-off or unreadable backup never replaces an intact one.
 - **Trap Team sound** plays on the Traptanium Portal's own speaker, or on the PC speakers when no Traptanium Portal is connected.
 - **Portal lights** follow the game.
 - **Unplugging is safe.** Figures on the virtual portal stay loaded while the real portal is away, and saves made meanwhile are written when it comes back.
@@ -57,7 +58,7 @@ All of them were tested with a Traptanium Portal (USB ID `1430:0150`) on Windows
 
 ### The exe (easiest)
 
-1. Download the zip from the [latest release](../../releases/latest) and unzip it to a folder of its own. The folder holds `PortalBridge.exe`, `portal_hide.dll`, `portal_descriptors.json` and `figure_names.json`; keep them together.
+1. Download the zip from the [latest release](../../releases/latest) and unzip it to a folder of its own. The folder holds `PortalBridge.exe`, `portal_hide.dll`, `portal_descriptors.json`, `figure_names.json` and `figure_details.json`; keep them together.
 2. Double-click `PortalBridge.exe`. Your figure dumps go to a `dumps` folder next to it.
 
 Some antivirus programs distrust exes packed with PyInstaller, and programs that load a DLL into another process. Both are what Portal Bridge does, so it may be flagged. You can check the source here and build both files yourself.
@@ -74,6 +75,8 @@ Python 3.13 was used. Build `portal_hide.dll` in an *x64 Native Tools Command Pr
 ```
 cl /nologo /O2 /LD portal_hide.c cfgmgr32.lib
 ```
+
+To build the exe and the DLL together, install PyInstaller alongside the requirements, then run `powershell -ExecutionPolicy Bypass -File build.ps1` (needs the Visual Studio C++ x64 build tools). It puts `PortalBridge.exe` and `portal_hide.dll` next to the source.
 
 ## Usage
 
@@ -103,6 +106,7 @@ If a game was already running when you started the bridge, the game holds the re
 
 ```
 python test_portal_bridge.py
+python -m unittest -v test_save_safety
 ```
 
 It prints `ok`. The tests use fake portals and a loopback USB/IP client, so no hardware is needed.

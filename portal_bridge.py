@@ -76,7 +76,7 @@ SETTINGS = os.path.join(HERE, 'settings.json')  # choices made in the window, ke
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
 USBIP_EXE = r'C:\Program Files\USBip\usbip.exe'
-VERSION = '1.3.1'  # compared with the latest GitHub release at start (latest_release)
+VERSION = '1.3.2'  # compared with the latest GitHub release at start (latest_release)
 RELEASES = 'https://api.github.com/repos/rhsts/skylanders-portal-bridge/releases/latest'
 HIDE_DLL = os.path.join(HERE, 'portal_hide.dll')
 HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe'}  # emulators that get portal_hide.dll
@@ -379,9 +379,10 @@ def stats(info):
 def damaged(path):
     try:
         with open(path, 'rb') as f:
-            return figure_info(f.read()).damaged
-    except (OSError, struct.error):
-        return False
+            data = f.read()
+        return len(data) != 1024 or figure_info(data).damaged
+    except (OSError, ValueError, IndexError, KeyError, struct.error):
+        return True  # unreadable or invalid is never evidence of a good backup
 
 
 def new_figure(fid, var):
@@ -418,9 +419,12 @@ def recycle(path):
 
 def keep_one_backup(uid, keep=None):
     """At most one backup per figure: keep `keep` (default: the newest whose save is not damaged, else the
-    newest) and move the others to the Recycle Bin."""
+    existing files are all preserved) and move the others to the Recycle Bin. An invalid `keep` is ignored."""
     paths = backups(uid).get(uid, [])
-    keep = keep or next((p for p in reversed(paths) if not damaged(p)), paths[-1] if paths else None)
+    if not keep or keep not in paths or damaged(keep):
+        keep = next((p for p in reversed(paths) if not damaged(p)), None)
+    if keep is None:
+        return  # no known-good copy: preserve everything for recovery
     for path in paths:
         if os.path.normcase(path) != os.path.normcase(keep):
             gone = recycle(path)
@@ -505,6 +509,9 @@ class Portal:
         self.on_command = None  # Mirror hook: sees every command after the virtual portal handled it
 
     def command(self, buf):
+        if buf[:1] == b'W' and len(buf) < 19:
+            self.queries.append(bytes(32))  # reject incomplete writes before padding short reports
+            return
         buf = bytes(buf).ljust(32, b'\0')  # Wii sends short reports, PC/Wii U send 32 bytes
         c, q = chr(buf[0]), None
         if c == 'A':
@@ -567,7 +574,7 @@ class Portal:
         return bytes([0x51, 0x01, block])
 
     def write(self, n, block, data):
-        if n >= 16 or block >= 64:
+        if not 0 <= n < 16 or not 0 <= block < 64 or len(data) != 16:
             return bytes(32)
         s = self.slots[n]
         if s.status & 1:
@@ -1000,6 +1007,9 @@ class Mirror:
     figures, since they must never see the real portal (they open it too, see the module docstring).
     """
 
+    WRITE_ATTEMPTS = 3
+    RETRY_DELAY = 0.25
+
     def __init__(self, server, vhci_bus):
         self.server, self.vhci_bus = server, vhci_bus
         self.real = None
@@ -1010,6 +1020,8 @@ class Mirror:
         self.failed = set()  # real slots that would not read; retried after the figure is lifted
         self.jobs = queue.Queue()  # real-portal work queued by game commands (write-back, lights)
         self.write_back = False  # UI checkbox, default off; change it with set_write_back()
+        self.write_epoch = 0  # disabling cancels automatic jobs, including those already in the queue
+        self.retries = {}  # (uid, block) -> failed automatic write, retained if retries are exhausted
         self.known = {}  # real slot -> bytearray: what the real figure holds (read on placement, updated by writes)
         self.left = {}  # uid -> what the real figure held when it was lifted (see place())
         self.offers = queue.Queue()  # archived saved copies the window offers to restore (see add())
@@ -1176,6 +1188,7 @@ class Mirror:
     def remove(self, i):
         with self.server.cv:
             v, path, uid = self.slots.pop(i)
+            self.clear_retries(uid)
             held = self.known.pop(i, None)
             if held is not None:
                 self.left[uid] = bytes(held)
@@ -1185,6 +1198,8 @@ class Mirror:
 
     def release(self):
         with self.server.cv:
+            self.write_epoch += 1
+            self.retries.clear()
             for v, path, uid in self.slots.values():
                 self.kept[uid] = (v, path)
             self.slots.clear()
@@ -1232,11 +1247,12 @@ class Mirror:
 
     def queue_block(self, i, block, data):  # cv held
         uid = self.slots[i][2]
+        if not 1 <= block < 64 or block % 4 == 3 or len(data) != 16:
+            return log(f'write-back {uid} block {block:#04x}: refused (invalid data block)')
         if not has_backup(uid):
             return log(f'write-back {uid}: no backup in dumps/, not written')
-        if block == 0 or block % 4 == 3:  # manufacturer block and sector trailers (keys) are never written
-            return log(f'write-back {uid} block {block:#04x}: refused (not a data block)')
-        self.jobs.put(('write', i, block, data, uid))
+        self.retries.pop((uid, block), None)  # a new save supersedes any older retry
+        self.jobs.put(('write', i, block, bytes(data), uid, self.write_epoch))
 
     def queue_sync(self, i):  # cv held
         """Queue every data block where the game's copy differs from the real figure. Write-back only
@@ -1351,6 +1367,9 @@ class Mirror:
 
     def write_verified(self, i, block, data, uid, what='write-back'):  # Mirror thread
         """Write one data block to the figure in real slot i if it is still uid; True if it reads back equal."""
+        if not 1 <= block < 64 or block % 4 == 3 or len(data) != 16:
+            log(f'{what} {uid} block {block:#04x}: refused (invalid data block)')
+            return False
         try:
             if self.real.read_block(i, 0)[:4].hex() != uid:  # figure swapped since the write was queued
                 log(f'{what} {uid} block {block:#04x}: figure in real slot {i} changed, not written')
@@ -1368,8 +1387,48 @@ class Mirror:
 
     def set_write_back(self, on):
         with self.server.cv:
+            if not on:
+                self.write_epoch += 1
+                self.retries.clear()
             self.write_back = on
             return sum(self.queue_sync(i) for i in self.slots) if on else 0
+
+    def clear_retries(self, uid):  # cv held
+        for key in [key for key in self.retries if key[0] == uid]:
+            del self.retries[key]
+
+    def current_write(self, i, block, data, uid, epoch):  # cv held
+        if not self.write_back or epoch != self.write_epoch or i not in self.slots:
+            return False
+        v, path, current_uid = self.slots[i]
+        game = self.server.portal.slots[v]
+        return (current_uid == uid and game.path == path and game.status & 1
+                and game.data[block * 16:block * 16 + 16] == data)
+
+    def run_write(self, args, attempt=1):  # Mirror thread; never hold cv during hardware I/O
+        i, block, data, uid, epoch = args
+        key = (uid, block)
+        with self.server.cv:
+            if not self.current_write(*args):
+                self.retries.pop(key, None)
+                return
+        ok = self.write_verified(i, block, data, uid)
+        with self.server.cv:
+            if ok or not self.current_write(*args):
+                self.retries.pop(key, None)
+                return
+            due = time.monotonic() + self.RETRY_DELAY * 2 ** (attempt - 1)
+            self.retries[key] = SimpleNamespace(args=args, attempt=attempt, due=due)
+            if attempt == self.WRITE_ATTEMPTS:
+                self.notices.put(f'Figure {uid}: block {block:#04x} could not be saved after {attempt} attempts. '
+                                 'Its latest progress is in the current .sky copy. Check the portal, then turn '
+                                 'write-back off and on to retry, or lift and replace the figure.')
+
+    def sync_status(self):
+        with self.server.cv:
+            failed = sum(r.attempt >= self.WRITE_ATTEMPTS for r in self.retries.values())
+            pending = len(self.retries) - failed
+        return (f' · retrying {pending} save block(s)' if pending else '') + (f' · {failed} save block(s) FAILED' if failed else '')
 
     def run_jobs(self):
         while not self.jobs.empty():
@@ -1377,12 +1436,22 @@ class Mirror:
             if job[0] == 'raw':
                 self.real.send(*job[1])
             elif job[0] == 'restore':
+                with self.server.cv:
+                    self.clear_retries(job[1])  # explicit restore supersedes older automatic retries
                 try:
                     self.restore_now(*job[1:])
                 except (ValueError, TimeoutError) as e:  # figure moved mid-read/write
                     log(f'restore {job[1]}: {e}; stopped, see the lines above for what was written')
             else:
-                self.write_verified(*job[1:])
+                self.run_write(job[1:])
+        with self.server.cv:
+            due = [(key, r) for key, r in self.retries.items()
+                   if r.attempt < self.WRITE_ATTEMPTS and r.due <= time.monotonic()]
+        for key, retry in due:
+            with self.server.cv:
+                if self.retries.get(key) is not retry:
+                    continue
+            self.run_write(retry.args, retry.attempt + 1)
 
 
 def capture():
@@ -1960,7 +2029,7 @@ class App:
         if m:
             colour = next(c for key, c in self.STATE_COLOURS if key in m.state)
             self.dot.configure(foreground=colour)
-            self.real.configure(text=m.state[0].upper() + m.state[1:])
+            self.real.configure(text=m.state[0].upper() + m.state[1:] + m.sync_status())
             while not m.offers.empty():
                 self.open_restore(select=m.offers.get_nowait())
             while not m.notices.empty():

@@ -57,7 +57,8 @@ def one_backup():
                  'Zook (86bc1263) - before restore 2026-10-10 12.57.04.sky', 'Zook (86bc1263) - saved 2026-10-10 12.57.04-2.sky',
                  'Zook (86bc1263) - current.sky', 'Zook (86bc1263) - loaded copy.sky', 'Trigger Happy (427dbe01) - original.sky']
         for name in names:
-            open(os.path.join(d, name), 'wb').close()
+            with open(os.path.join(d, name), 'wb') as f:
+                f.write(figure('86bc1263'))
         assert [os.path.basename(p) for p in pb.backups()['86bc1263']] == [names[0], names[1], names[2], names[3]]
         for uid in pb.backups():
             pb.keep_one_backup(uid)
