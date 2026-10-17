@@ -454,14 +454,13 @@ def saved_figure(uid, level_xp=(33000, 10203), gold=1234, nickname='raf'):
     d[a + 0x20:a + 0x20 + 2 * len(nickname)] = nickname.encode('utf-16-le')
     struct.pack_into('<H', d, 0x110 + 3, level_xp[1])
     d[0x112] = 1
-    (_, t1), (_, t2), (_, t3) = pb.area_checksums(d, a)
-    struct.pack_into('<HH', d, a + 0x0A, t3, t2)
-    struct.pack_into('<H', d, a + 0x0E, pb.area_checksums(d, a)[0][1])  # type 1 covers types 2 and 3
+    pb.seal(d, a, 0x110)  # checksum types 1-3, and 6 for the second area
     return pb.crypt(bytes(d), encrypt=True)
 
 
 def reading(figure_info):
-    """Level, gold and nickname from a figure's encrypted save, and damaged saves never offered or written."""
+    """Level, gold and nickname from a figure's encrypted save; a damaged figure gets a repair offered, and
+    damaged saves are never offered or written."""
     pb.figure_info = figure_info
     with tempfile.TemporaryDirectory() as d:
         pb.DUMPS = d
@@ -498,13 +497,7 @@ def reading(figure_info):
         pb.save_dump(old, saved_figure('1a2b3c4d', gold=999))
         m.real = FakeReal({0: bytearray(broken)})
         m.poll()
-        assert m.offers.get_nowait() == old and m.notices.empty()
-        # no intact backup: a pop-up says so
-        other = bytearray(broken)
-        other[0:4] = bytes.fromhex('5e6f7a8b')
-        m.real.figures = {0: bytearray(broken), 1: other}
-        m.poll()
-        assert m.offers.empty() and 'damaged' in m.notices.get_nowait()
+        assert m.repairs.get_nowait() == '1a2b3c4d' and m.offers.empty() and m.notices.empty()  # a repair, not a backup
 
         # reset: the save blocks become empty, header and trailers stay, what the figure held is the backup
         zook = saved_figure('86bc1263')
@@ -519,8 +512,84 @@ def reading(figure_info):
         undo = [f for f in os.listdir(d) if f.startswith('Zook (86bc1263) - before restore')]
         assert len(undo) == 1 and open(os.path.join(d, undo[0]), 'rb').read() == zook
 
+    # repair keeps the progress and makes the checksums valid; edits keep the previous save as fallback
+    good = saved_figure('1a2b3c4d', (33000, 10203), 1234, 'raf')
+    broken = bytearray(pb.crypt(good))
+    broken[0xD0] ^= 1  # block 13: covered by checksum type 3
+    broken = pb.crypt(bytes(broken), encrypt=True)
+    assert pb.figure_info(broken).damaged
+    fixed = pb.figure_info(pb.repaired(broken))
+    assert not fixed.damaged and (fixed.level, fixed.gold, fixed.nickname) == (11, 1234, 'raf')
+    for level in (1, 10, 11, 15, 20):
+        e = pb.figure_info(pb.edited(good, gold=65000, nickname='Zooky', level=level))
+        assert (e.level, e.gold, e.nickname, e.damaged, e.old_damaged) == (level, 65000, 'Zooky', False, False)
+    e = pb.crypt(pb.edited(good, gold=5))
+    assert e[0x240 + 9] == 2 and struct.unpack_from('<H', e, 0x243)[0] == 5  # new save in the older area
+    assert struct.unpack_from('<H', e, 0x83)[0] == 1234  # the previous save is still there
+    assert pb.figure_info(pb.edited(good, gold=5)).level == 11  # untouched fields stay
+
+    # volume: 16-bit samples scaled and clipped
+    sound = pb.PortalSound(speaker=lambda block: played.append(block) or True)
+    played = []
+    sound.volume = 0.5
+    sound.feed(struct.pack('<4h', 1000, -1000, 32767, -32768) + bytes(56))
+    assert struct.unpack_from('<4h', played[0]) == (500, -500, 16383, -16384)
+    sound.volume = 2
+    sound.feed(struct.pack('<2h', 30000, -30000) + bytes(60))
+    assert struct.unpack_from('<2h', played[1]) == (32767, -32768)
+
+    # games: found from each emulator's own settings
+    with tempfile.TemporaryDirectory() as d:
+        cemu, rpcs3, dolphin = (os.path.join(d, x) for x in ('cemu', 'rpcs3', 'dolphin'))
+        game = os.path.join(d, 'roms', 'Skylanders Trap Team [Game] [0005000010181f00]')
+        os.makedirs(os.path.join(game, 'code'))
+        open(os.path.join(game, 'code', 'tfbGame_cafe.rpx'), 'w').close()
+        os.makedirs(os.path.join(d, 'roms', 'Skylanders Trap Team [Update] [0005000e10181f00]', 'code'))
+        os.makedirs(cemu)
+        open(os.path.join(cemu, 'settings.xml'), 'w').write(f'<GamePaths><Entry>{os.path.join(d, "roms")}</Entry></GamePaths>')
+        os.makedirs(os.path.join(rpcs3, 'config'))
+        open(os.path.join(rpcs3, 'config', 'games.yml'), 'w').write('BLES01689: F:/ps3roms/Skylanders - Giants (Europe) (En,Fr)/\n')
+        os.makedirs(os.path.join(dolphin, 'User', 'Config'))
+        open(os.path.join(dolphin, 'portable.txt'), 'w').close()
+        wii = os.path.join(d, 'wii')
+        os.makedirs(wii)
+        open(os.path.join(wii, "Skylanders - Spyro's Adventure (Rev 3).rvz"), 'w').close()
+        open(os.path.join(dolphin, 'User', 'Config', 'Dolphin.ini'), 'w').write(f'[General]\nISOPath0 = {wii}\nISOPaths = 1\n')
+        games = pb.find_games({'Cemu': os.path.join(cemu, 'Cemu.exe'), 'RPCS3': os.path.join(rpcs3, 'rpcs3.exe'),
+                               'Dolphin': os.path.join(dolphin, 'Dolphin.exe')})
+        assert [(t, e) for t, e, p in games] == [('Skylanders - Giants', 'RPCS3'), ("Skylanders - Spyro's Adventure", 'Dolphin'),
+                                                 ('Skylanders Trap Team', 'Cemu')], games
+        assert games[2][2].endswith('tfbGame_cafe.rpx')
+
     assert pb.newer('v1.3.0', '1.2.0') and pb.newer('v1.10.0', '1.9.9') and not pb.newer('v1.2.0', '1.2.0')
     assert not pb.newer('v1.1.1', '1.2.0') and not pb.newer('nightly', '1.2.0')
+
+
+def stale_reads():
+    """read_figure gets every block right on a portal that answers with the previously queried block's data
+    now and then, in runs (also stuck for several queries), as the user's portal does."""
+    import random
+    rng = random.Random(7)
+
+    class Stale(pb.RealPortal):
+        def __init__(self, data):
+            self.data, self.loaded, self.stuck = data, 0, 0
+
+        def read_block_once(self, slot, block):
+            if self.stuck == 0 and rng.random() < 0.1:
+                self.stuck = rng.randint(1, 5)
+            if self.stuck:
+                self.stuck -= 1
+            else:
+                self.loaded = block
+            return self.data[self.loaded * 16:self.loaded * 16 + 16]
+
+    for kind in range(40):
+        data = bytearray(rng.randbytes(1024) if kind % 2 else bytes(1024))  # random, or mostly empty
+        data[0:5] = bytes.fromhex('1a2b3c4d') + bytes([0x1a ^ 0x2b ^ 0x3c ^ 0x4d])
+        for b in rng.sample(range(2, 64), 20):  # runs of equal blocks (block 1, the header, never equals block 0)
+            data[b * 16:b * 16 + 16] = data[(b - 1) * 16:b * 16]
+        assert Stale(bytes(data)).read_figure(0) == bytes(data)
 
 
 def main():
@@ -535,6 +604,7 @@ def main():
     sound()
     speaker()
     lifted_mid_write()
+    stale_reads()
     creating()
     game_first()
     contention()

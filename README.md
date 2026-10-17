@@ -13,8 +13,16 @@ Portal Bridge creates a *virtual* portal over USB/IP. Every figure you place on 
 - **Backups of every figure** in the `dumps` folder, named after the character, for example `Zook (86bc1263) - original.sky`. Each figure keeps one backup, its newest. An older backup goes to the Recycle Bin, never straight to deletion.
 - **Restore saved progress.** If a figure's saved copy has progress the figure lacks, a pop-up offers to write it to the figure, one figure at a time. What the figure held before is kept as its backup, so a restore can be undone.
 - **Figure data.** Each figure's save is decrypted to show its level, gold and nickname in the Add Skylander list and the restore pop-up. For a Trap Team trap, it shows the villain inside (a Villain column in the Add Skylander list, for example Air Jughead: Bad Juju).
-- **Damaged saves are caught.** When a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". Portal Bridge warns you as soon as such a figure is placed and offers its last intact backup. A damaged copy is never offered, written to a figure, or kept in place of an intact backup.
-- **Reset figure.** Select a figure from the real portal and click **Reset figure…** to erase its progress, like a toy fresh out of the box. What it held is kept as its backup, so **Restore progress…** can undo it.
+- **Damaged saves are caught.** When a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". Portal Bridge warns you as soon as such a figure is placed and offers to repair it, keeping all its progress. A damaged copy is never offered, written to a figure, or kept in place of an intact backup.
+- **Start game…** lists the Skylanders games your emulators know (Cemu's game paths, RPCS3's games.yml, Dolphin's ISO folders) and starts one with the bridge already running, so the real portal is hidden from the very start.
+- **Figure ▾ menu** for a figure on the real portal. Each action writes like a restore: what the figure held is kept as its backup, and every block is read back to check it.
+  - **Edit gold, nickname, level…**: saved the way the game saves, with the previous save kept on the figure as its fallback.
+  - **Repair damaged save…**: gives a damaged newest save valid checksums again and keeps all progress, which is what SuperChargers does.
+  - **Reset to a new figure…**: erases its progress, like a toy fresh out of the box.
+  - **Back up all figures to a zip…**
+- **Collection.** The All Skylanders list shows each figure's game and element and ticks the ones you have, with a count per game.
+- **Details column** in the main window: level and gold, or the villain inside a trap.
+- **Portal speaker volume** slider.
 - **Drag and drop** `.sky` files onto the window to load them.
 - **Update check.** At start Portal Bridge looks up the latest release on GitHub, and shows a link in the window when there is a newer version.
 - **Trap Team sound** plays on the Traptanium Portal's own speaker, or on the PC speakers when no Traptanium Portal is connected.
@@ -106,6 +114,7 @@ It prints `ok`. The tests use fake portals and a loopback USB/IP client, so no h
 | `portal_bridge.py` | The program: USB/IP server, portal logic, window. |
 | `portal_hide.c` | Source of `portal_hide.dll`. |
 | `portal_descriptors.json` | USB descriptors of a real portal, which the virtual portal copies. Recreate them from your own portal with `python portal_bridge.py capture`. |
+| `figure_details.json` | Game and element of each figure, from Dolphin's Skylander list (the Senseis: Imaginators). |
 | `figure_names.json` | Figure IDs and names (548 figures): Dolphin's Skylander list plus the 31 Imaginators Senseis from Cemu's and RPCS3's lists. Creation Crystals are not in it; neither emulator lists them. |
 | `test_portal_bridge.py` | Tests. |
 | `portal.ico` | Icon. |

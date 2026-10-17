@@ -30,13 +30,14 @@ Write-back (checkbox, on by default, choice kept in settings.json): game saves t
 figure while it sits on the real portal, data blocks only, each verified by reading it back.
 Restore (button; the pop-up also opens by itself when a "saved" copy is made): writes a figure's
 backup onto it the same way; what the figure held becomes its backup ("before restore").
-Reset figure (button): empties the save of the selected figure on the real portal, written like a restore.
+Figure menu: edit gold/nickname/level, repair a damaged save, reset to a new figure (each written like a
+restore), back up all dumps to a zip. Start game: launches a Skylanders game in Cemu, RPCS3 or Dolphin.
 Drop .sky files on the window to load them. At start the latest GitHub release is checked (VERSION).
 Add Skylander (button): search the figures in dumps/ and load one's current copy or backup, or create
 a new blank figure of any Skylander in figure_names.json (as Dolphin's "Create Skylander" does).
 Figure data (figure_info): the save is decrypted to show level, gold, nickname (traps: the villain inside), and to catch a damaged
-save (the game's "A toy on the portal has a problem"). A damaged figure placed on the portal gets its
-intact backup offered; a damaged copy is never offered, written or kept over an intact backup.
+save (the game's "A toy on the portal has a problem"). A damaged figure placed on the portal gets a
+repair offered (progress kept); a damaged copy is never offered, written or kept over an intact backup.
 
 Portal sound (Trap Team's villain and trap sounds): played on the real Traptanium portal's speaker,
 or on the PC's default audio device when there is none or the portal is away, see PortalSound.
@@ -47,7 +48,9 @@ Portal logic is ported from Dolphin Source/Core/Core/IOS/USB/Emulated/Skylanders
 (cross-checked with RPCS3 rpcs3/Emu/Io/Skylander.cpp). USB/IP framing follows the Linux
 Documentation/usb/usbip_protocol.rst.
 """
+import array
 import csv
+import glob
 import hashlib
 import ctypes
 import itertools
@@ -73,7 +76,7 @@ SETTINGS = os.path.join(HERE, 'settings.json')  # choices made in the window, ke
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
 USBIP_EXE = r'C:\Program Files\USBip\usbip.exe'
-VERSION = '1.2.0'  # compared with the latest GitHub release at start (latest_release)
+VERSION = '1.3.0'  # compared with the latest GitHub release at start (latest_release)
 RELEASES = 'https://api.github.com/repos/rhsts/skylanders-portal-bridge/releases/latest'
 HIDE_DLL = os.path.join(HERE, 'portal_hide.dll')
 HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe'}  # emulators that get portal_hide.dll
@@ -122,6 +125,11 @@ try:  # Dolphin's list_skylanders (Source/Core/Core/IOS/USB/Emulated/Skylanders/
         NAMES = json.load(_f)  # "id:variant" -> character name
 except OSError:
     NAMES = {}
+try:  # "id:variant" -> [game, element], from Dolphin's list_skylanders (Senseis: Imaginators, no element)
+    with open(os.path.join(HERE, 'figure_details.json'), encoding='utf-8') as _f:
+        DETAILS = json.load(_f)
+except OSError:
+    DETAILS = {}
 
 
 def figure_name(data):
@@ -215,6 +223,71 @@ def crypt(data, encrypt=False):
     return bytes(out)
 
 
+A_BLOCKS = (0x00, 0x10, 0x20, 0x40, 0x50, 0x60, 0x80)  # the data blocks of a main save area, by offset
+B_BLOCKS = (0x00, 0x10, 0x30, 0x40)  # the data blocks of a second save area (0x110 / 0x2D0)
+
+
+def b_checksum(d, b):
+    """(stored, computed) checksum type 6 of the second save area at offset b: CRC16-CCITT over its four data
+    blocks with 06 01 in place of its own checksum (matches all 54 of the user's areas, 2026-10-16)."""
+    data = b''.join(bytes(d[b + o:b + o + 16]) for o in B_BLOCKS)
+    return struct.unpack_from('<H', data, 0)[0], crc16(b'\x06\x01' + data[2:])
+
+
+def seal(d, a, b=None):
+    """Set the checksums of main area a (and second area b) in a decrypted image."""
+    (_, t1), (_, t2), (_, t3) = area_checksums(d, a)
+    struct.pack_into('<HH', d, a + 0x0A, t3, t2)
+    struct.pack_into('<H', d, a + 0x0E, area_checksums(d, a)[0][1])  # type 1 covers types 2 and 3
+    if b is not None:
+        struct.pack_into('<H', d, b, b_checksum(d, b)[1])
+
+
+def recrypt(original, plain):
+    """Encrypt a changed decrypted image, keeping the original's stored bytes for every block whose content did
+    not change. crypt() leaves zero blocks alone, but a figure can hold an encrypted empty block; re-encrypting
+    everything would rewrite those for nothing."""
+    old, new = crypt(original), bytearray(crypt(plain, encrypt=True))
+    for i in range(64):
+        if old[i * 16:i * 16 + 16] == plain[i * 16:i * 16 + 16]:
+            new[i * 16:i * 16 + 16] = original[i * 16:i * 16 + 16]
+    return bytes(new)
+
+
+def repaired(data):
+    """The figure with the checksums of its newest save areas made valid again, all progress kept. This is
+    what SuperChargers did to the user's Snap Shot (2026-10-11): it saved the same data with good checksums."""
+    d = bytearray(crypt(data))
+    a, b = newest(d, 0x80, 0x240, 9), newest(d, 0x110, 0x2D0, 2)
+    seal(d, a, b if any(data[b:b + 16]) else None)
+    return recrypt(data, bytes(d))
+
+
+def edited(data, gold=None, nickname=None, level=None):
+    """The figure with new gold, nickname and/or level, saved the way the game and Dolphin's SetData save: into
+    the older area of each pair, with a counter one past the newest, so the previous save stays as fallback."""
+    d = bytearray(crypt(data))
+    a, b = newest(d, 0x80, 0x240, 9), newest(d, 0x110, 0x2D0, 2)
+    a2, b2 = 0x80 + 0x240 - a, 0x110 + 0x2D0 - b
+    for o in A_BLOCKS:
+        d[a2 + o:a2 + o + 16] = d[a + o:a + o + 16]
+    for o in B_BLOCKS:
+        d[b2 + o:b2 + o + 16] = d[b + o:b + o + 16]
+    d[a2 + 9], d[b2 + 2] = (d[a + 9] + 1) & 0xFF, (d[b + 2] + 1) & 0xFF
+    if gold is not None:
+        struct.pack_into('<H', d, a2 + 3, gold)
+    if nickname is not None:
+        name = nickname.encode('utf-16-le').ljust(32, b'\0')
+        d[a2 + 0x20:a2 + 0x30], d[a2 + 0x40:a2 + 0x50] = name[:16], name[16:32]
+    if level is not None:
+        xp = LEVELS[level - 1]
+        d[a2:a2 + 3] = min(xp, 33000).to_bytes(3, 'little')
+        struct.pack_into('<H', d, b2 + 3, min(max(xp - 33000, 0), 63500))
+        d[b2 + 8:b2 + 11] = min(max(xp - 96500, 0), 101000).to_bytes(3, 'little')
+    seal(d, a2, b2)
+    return recrypt(data, bytes(d))
+
+
 def area_checksums(d, a):
     """Checksum types 1, 2 and 3 of the decrypted save area at offset a, as (stored, computed) pairs. Type 1
     covers the area's first block with 05 00 in place of its own checksum; type 2 the next three data
@@ -282,14 +355,15 @@ def figure_info(data):
     a = newest(d, 0x80, 0x240, 9)
     used = [x for x in (0x80, 0x240) if any(data[x:x + 16])]
     bad = {x: any(s != c for s, c in area_checksums(d, x)) for x in used}
-    info.kind, info.damaged = 'skylander', bad[a]
-    info.old_damaged = any(v for x, v in bad.items() if x != a)
+    b = newest(d, 0x110, 0x2D0, 2)
+    bad_b = {x: b_checksum(d, x)[0] != b_checksum(d, x)[1] for x in (0x110, 0x2D0) if any(data[x:x + 16])}
+    info.kind, info.damaged = 'skylander', bad[a] or bad_b.get(b, False)
+    info.old_damaged = any(v for x, v in bad.items() if x != a) or any(v for x, v in bad_b.items() if x != b)
     info.gold = struct.unpack_from('<H', d, a + 3)[0]
     info.nickname = (d[a + 0x20:a + 0x30] + d[a + 0x40:a + 0x50]).decode('utf-16-le', 'replace').split('\0')[0]
     if 1000 <= fid < 2000:  # a Swapper's bottom half: the top half keeps the level and gold
         info.gold = None
     elif not 600 <= fid < 700:  # Imaginators count experience differently
-        b = newest(d, 0x110, 0x2D0, 2)
         xp = int.from_bytes(d[a:a + 3], 'little') + struct.unpack_from('<H', d, b + 3)[0] + int.from_bytes(d[b + 8:b + 11], 'little')
         info.level = sum(xp >= need for need in LEVELS)
     return info
@@ -548,6 +622,7 @@ class PortalSound:
 
     def __init__(self, speaker=None):
         self.speaker = speaker  # block -> True when the real portal played it
+        self.volume = 1.0  # set from the window's slider
         self.out, self.pending, self.partial = None, [], b''
         self.lock = threading.Lock()  # PC playback: feed() and close() run on different threads
         self.blocks = self.on_portal = self.dropped = 0
@@ -583,6 +658,9 @@ class PortalSound:
 
     def feed(self, block):  # USB/IP thread, without the server lock: the real portal may take ~4 ms
         self.blocks += 1
+        if self.volume != 1:  # samples are 16-bit little-endian
+            samples = array.array('h', block)
+            block = array.array('h', (max(-32768, min(32767, int(x * self.volume))) for x in samples)).tobytes()
         if self.speaker and self.speaker(block):
             self.on_portal += 1
         else:
@@ -890,8 +968,23 @@ class RealPortal:
         raise ValueError(f'slot {slot} block {block}: only stale answers')
 
     def read_figure(self, slot):
+        """All 64 blocks, most read once. A stale answer is the data of the previously queried block, which
+        here is the previous block, already read right; so only an answer equal to it needs the slow, parked
+        read_block (equal data is common: runs of empty blocks). Measured on the real portal 2026-10-17, 15
+        reads each identical to the parked method: a Swapper half 1.88 s -> 1.15 s (73 reads instead of 128),
+        Snap Shot 1.84 s -> 1.06 s, a trap (mostly empty blocks) 1.88 s -> 1.43 s."""
         ref = self.read_block0(slot)
-        return b''.join(self.read_block(slot, block, ref) for block in range(64))
+        got, prev, todo = {0: ref}, ref, list(range(1, 64))
+        while todo:
+            block = todo[0]
+            if not any(prev):  # after an empty block read a sector trailer (never empty): the empty block after
+                block = next((b for b in todo if b % 4 == 3), block)  # it can then be told from a stale answer
+            todo.remove(block)
+            d = None if not any(prev) and block % 4 != 3 else self.read_block_once(slot, block)
+            if d is None or d == prev:
+                d = self.read_block(slot, block, ref)
+            got[block] = prev = d
+        return b''.join(got[b] for b in range(64))
 
     def write_block(self, slot, block, data):
         self.send(ord('W'), 0x10 | slot, block, *data)
@@ -921,6 +1014,7 @@ class Mirror:
         self.left = {}  # uid -> what the real figure held when it was lifted (see place())
         self.offers = queue.Queue()  # archived saved copies the window offers to restore (see add())
         self.notices = queue.Queue()  # messages the window shows as a pop-up (see lost())
+        self.repairs = queue.Queue()  # uids of damaged figures just placed; the window offers to repair them
         self.speaker = False  # the claimed real portal is a Traptanium portal (see poll), which has a speaker
         self.audio_lock = threading.Lock()  # play() writes from the USB/IP thread; release() closes the handle
         self.state = 'real portal: looking'
@@ -1071,13 +1165,10 @@ class Mirror:
         if figure_info(figure).damaged:
             name = figure_name(figure)
             log(f'real slot {i}: the save on {name} ({uid}) is damaged; the game will say "A toy on the portal has a problem"')
-            offer = offer or next((b for b in reversed(backups(uid).get(uid, []))
-                                   if not damaged(b) and changed_blocks(open(b, 'rb').read(), figure)), None)
-            if not offer:
-                self.notices.put(f'The save on {name} is damaged, so the game will say "A toy on the portal has a '
-                                 'problem". There is no intact backup to write back. Reset the figure in a game '
-                                 'that offers it (SuperChargers fixed Snap Shot), or write another dump with '
-                                 '"Restore progress…" → "Other file…".')
+            self.repairs.put(uid)  # the window offers a repair, which keeps the progress, instead of a backup
+            if offer:
+                keep_one_backup(uid, keep=offer)  # still the figure's backup
+                offer = None
         if offer:
             keep_one_backup(uid, keep=offer)
             self.offers.put(offer)  # figure registered: the window asks whether to write the copy to it
@@ -1203,18 +1294,21 @@ class Mirror:
         self.jobs.put(('restore', uid, data, os.path.basename(path)))
         return uid
 
-    def reset(self, uid):
-        """Queue wiping the progress on figure uid on the real portal: its save blocks (8-63, not the sector
-        trailers) become empty, as on a figure fresh out of the box. Written like a restore, so what the
-        figure held becomes its backup first, and the game gets the empty figure."""
+    def write_image(self, uid, make, what):
+        """Queue writing make(what the figure holds) onto figure uid on the real portal, like a restore: what
+        the figure held becomes its backup first, every block is verified, and the game gets the result."""
         held = self.figure_data(uid)
         if held is None:
             raise ValueError(f'figure {uid} is not on the real portal')
         if not has_backup(uid):
             raise ValueError(f'figure {uid} has no backup in dumps/, so it is not written')
-        empty = bytes(held[:128]) + b''.join(bytes(held[b * 16:b * 16 + 16]) if b % 4 == 3 else bytes(16)
-                                             for b in range(8, 64))
-        self.jobs.put(('restore', uid, empty, 'an empty save (reset)'))
+        self.jobs.put(('restore', uid, make(held), what))
+
+    def reset(self, uid):
+        """Wipe the progress on figure uid: its save blocks (8-63, not the sector trailers) become empty, as on
+        a figure fresh out of the box."""
+        self.write_image(uid, lambda held: bytes(held[:128]) + b''.join(
+            bytes(held[b * 16:b * 16 + 16]) if b % 4 == 3 else bytes(16) for b in range(8, 64)), 'an empty save (reset)')
 
     def restore_now(self, uid, data, name):  # Mirror thread
         """Write a saved copy onto its figure, data blocks only, each verified. First: save what the
@@ -1477,6 +1571,110 @@ def accept_drops(hwnd, on_files):
     return proc
 
 
+EMULATOR_EXES = {'Cemu': ('Cemu.exe', 'Cemu_release.exe'), 'RPCS3': ('rpcs3.exe',), 'Dolphin': ('Dolphin.exe',)}
+
+
+def find_emulators():
+    """{emulator: exe} found in the usual places, up to three folders deep."""
+    home = os.path.expanduser('~')
+    roots = [os.path.join(home, x) for x in ('Documents', 'Desktop', 'Downloads')]
+    roots += [os.environ.get(x, '') for x in ('LOCALAPPDATA', 'ProgramFiles', 'ProgramFiles(x86)')]
+    roots += [f'{c}:\\' for c in 'CDEFG' if os.path.isdir(f'{c}:\\')]
+    found = {}
+    for name, exes in EMULATOR_EXES.items():
+        hits = [h for r in roots if r for exe in exes for depth in range(4)
+                for h in glob.glob(os.path.join(glob.escape(r), *['*'] * depth, exe))]
+        if hits:
+            # the official name wins (Cemu.exe over a Cemu_release.exe hybrid build), then the newest
+            found[name] = max(hits, key=lambda h: (os.path.basename(h).lower() == exes[0].lower(), os.path.getmtime(h)))
+    return found
+
+
+def title_of(path):
+    """'Skylanders Trap Team' from 'Skylanders Trap Team [Game] [0005000010181f00]' or '... (Europe) (En,Fr).rvz'.
+    For an .rpx inside a game folder, the folder's name ('.../Skylanders SuperChargers [BS5P52]/content/x.rpx')."""
+    if path.lower().endswith('.rpx'):
+        path = next((part for part in reversed(re.split(r'[/\\]', path)) if 'skylanders' in part.lower()), path)
+    name = os.path.basename(path.rstrip('/\\'))
+    name = re.sub(r'\.(wua|wud|wux|rpx|iso|wbfs|rvz|gcz|ciso|wia)$', '', name, flags=re.I)
+    return re.sub(r'\s+', ' ', re.sub(r'\[.*?\]|\(.*?\)|™', '', name)).strip()
+
+
+def find_games(emulators):
+    """[(title, emulator, path)] of the Skylanders games each emulator knows, from its own settings:
+    Cemu's GamePaths, RPCS3's games.yml, Dolphin's ISOPath folders."""
+    games = []
+    cemu = emulators.get('Cemu')
+    if cemu:
+        xml = os.path.join(os.path.dirname(cemu), 'settings.xml')
+        xml = xml if os.path.exists(xml) else os.path.join(os.environ.get('APPDATA', ''), 'Cemu', 'settings.xml')
+        try:
+            entries = re.findall(r'<Entry>(.*?)</Entry>', open(xml, encoding='utf-8').read())
+        except OSError:
+            entries = []
+        for e in entries:
+            for path in [e] + (glob.glob(os.path.join(glob.escape(e), '*')) if os.path.isdir(e) and
+                               not os.path.isdir(os.path.join(e, 'code')) else []):
+                if re.search(r'\[(Update|DLC)\]', path, re.I) or 'skylanders' not in path.lower():
+                    continue
+                if os.path.isdir(path):
+                    rpx = glob.glob(os.path.join(glob.escape(path), 'code', '*.rpx'))
+                    if rpx:
+                        games.append((title_of(path), 'Cemu', rpx[0]))
+                elif re.search(r'\.(wua|wud|wux|rpx)$', path, re.I):
+                    games.append((title_of(path), 'Cemu', path))
+    rpcs3 = emulators.get('RPCS3')
+    if rpcs3:
+        try:
+            lines = open(os.path.join(os.path.dirname(rpcs3), 'config', 'games.yml'), encoding='utf-8').read().splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            m = re.match(r'\s*([A-Z]{4}\d{5}):\s*(.+?)\s*$', line)
+            if m and 'skylanders' in m[2].lower():
+                eboot = os.path.join(m[2], 'PS3_GAME', 'USRDIR', 'EBOOT.BIN')
+                games.append((title_of(m[2]), 'RPCS3', eboot if os.path.exists(eboot) else m[2]))
+    dolphin = emulators.get('Dolphin')
+    if dolphin:
+        here = os.path.dirname(dolphin)
+        ini = (os.path.join(here, 'User', 'Config', 'Dolphin.ini') if os.path.exists(os.path.join(here, 'portable.txt'))
+               else os.path.join(os.environ.get('APPDATA', ''), 'Dolphin Emulator', 'Config', 'Dolphin.ini'))
+        try:
+            folders = re.findall(r'^ISOPath\d+\s*=\s*(.+?)\s*$', open(ini, encoding='utf-8').read(), re.M)
+        except OSError:
+            folders = []
+        for folder in folders:
+            for path in glob.glob(os.path.join(glob.escape(folder), '*')):
+                if 'skylanders' in path.lower() and re.search(r'\.(iso|wbfs|rvz|gcz|ciso|wia)$', path, re.I):
+                    games.append((title_of(path), 'Dolphin', path))
+    unique = {}
+    for title, emulator, path in games:  # the same game in two folders: the first one listed
+        unique.setdefault((title, emulator), path)
+    return sorted((t, e, p) for (t, e), p in unique.items())
+
+
+def start_game(exe, emulator, path):
+    """Start an emulator with a game, and load portal_hide.dll into it at once: a game booted straight from
+    the command line counts the portals sooner than one picked in the emulator's window."""
+    args = ['-e', path] if emulator == 'Dolphin' else ['-g', path] if emulator == 'Cemu' else [path]
+    proc = subprocess.Popen([exe, *args], cwd=os.path.dirname(exe))
+    log(f'started {os.path.basename(exe)} with {title_of(path)}')
+
+    def hide():
+        for _ in range(300):  # every 50 ms for 15 s; the 1-second watch_emulators also keeps trying
+            if proc.poll() is not None:
+                return
+            try:
+                if inject(proc.pid, HIDE_DLL):
+                    return log(f'{os.path.basename(exe)} (pid {proc.pid}): real portal hidden from it (started by the bridge)')
+            except OSError:
+                pass
+            time.sleep(0.05)
+    if os.path.exists(HIDE_DLL):
+        threading.Thread(target=hide, daemon=True).start()
+    return proc
+
+
 def take_foreground(hwnd):
     """Bring a window in front of a fullscreen game. Topmost alone is not enough: Windows keeps a background
     program from taking the foreground, and a fullscreen game (Cemu's borderless Vulkan window, 2026-10-14)
@@ -1550,6 +1748,9 @@ class App:
         self.dot.pack(side='left', padx=(0, 6))
         self.real = ttk.Label(pill, style='Card.TLabel')
         self.real.pack(side='left')
+        if mirror:
+            ttk.Button(header, text='Start game…', style='Accent.TButton', command=self.open_games).grid(
+                row=0, column=2, rowspan=2, sticky='e', padx=(18, 0))
         self.update_link = ttk.Label(header, style='Link.TLabel', cursor='hand2')  # shown by refresh()
         self.new_version = None  # (tag, url), set by the update check thread
         threading.Thread(target=lambda: setattr(self, 'new_version', (latest_release() or (None,))), daemon=True).start()
@@ -1566,11 +1767,22 @@ class App:
         if mirror:
             ttk.Button(top, text='Restore progress…', command=self.open_restore).pack(side='right')
         if mirror:
-            ttk.Button(top, text='Reset figure…', command=self.reset_selected).pack(side='right', padx=(0, 8))
+            menu = tk.Menu(root, tearoff=False)
+            menu.add_command(label='Edit gold, nickname, level…', command=self.edit_selected)
+            menu.add_command(label='Repair damaged save…', command=self.repair_selected)
+            menu.add_command(label='Reset to a new figure…', command=self.reset_selected)
+            menu.add_separator()
+            menu.add_command(label='Back up all figures to a zip…', command=self.backup_all)
+            figure_button = ttk.Button(top, text='Figure ▾')
+            figure_button.configure(command=lambda: menu.tk_popup(figure_button.winfo_rootx(),
+                                                                   figure_button.winfo_rooty() + figure_button.winfo_height()))
+            figure_button.pack(side='right', padx=(0, 8))
         ttk.Button(top, text='Unload', command=self.unload_selected).pack(side='right', padx=(0, 8))
         ttk.Button(top, text='Add Skylander…', command=self.open_picker).pack(side='right', padx=(0, 8))
 
-        cols = (('slot', 'SLOT', 60), ('figure', 'FIGURE', 190), ('source', 'SOURCE', 170), ('file', 'FILE', 260))
+        cols = (('slot', 'SLOT', 60), ('figure', 'FIGURE', 190), ('details', 'DETAILS', 150), ('source', 'SOURCE', 170),
+                ('file', 'FILE', 260))
+        self.detail_cache = {}  # figure image -> 'level 11 · 2,594 gold' (decrypting every 200 ms is wasteful)
         table = ttk.Frame(portal, style='Card.TFrame')
         table.pack(fill='both', expand=True, pady=(12, 0))
         self.tree = ttk.Treeview(table, columns=[c[0] for c in cols], show='headings', height=8)
@@ -1586,11 +1798,20 @@ class App:
             self.wb = tk.BooleanVar(value=self.settings().get('write_back', True))  # on unless turned off
             mirror.set_write_back(self.wb.get())
             log('write-back to real figures ' + ('ON' if self.wb.get() else 'off'))
-            self.wb_box = ttk.Checkbutton(portal, text='Write saves to real figures', variable=self.wb,
+            foot = ttk.Frame(portal, style='Card.TFrame')
+            foot.pack(fill='x')
+            self.wb_box = ttk.Checkbutton(foot, text='Write saves to real figures', variable=self.wb,
                                           style='Card.TCheckbutton', command=self.toggle_write_back)
-            self.wb_box.pack(anchor='w')
-            ttk.Label(portal, style='CardMuted.TLabel', text='Game saves also go onto the figure on the real '
-                      'portal. Every block is read back to check it.').pack(anchor='w', padx=(self.box + 1, 0))
+            self.wb_box.grid(row=0, column=0, sticky='w')
+            ttk.Label(foot, style='CardMuted.TLabel', text='Game saves also go onto the figure on the real '
+                      'portal. Every block is read back to check it.').grid(row=1, column=0, sticky='w', padx=(self.box + 1, 0))
+            foot.columnconfigure(0, weight=1)
+            ttk.Label(foot, text='Portal speaker volume', style='Card.TLabel').grid(row=0, column=1, sticky='e')
+            self.volume = tk.IntVar(value=self.settings().get('volume', 100))
+            scale = ttk.Scale(foot, from_=0, to=100, variable=self.volume, length=160, command=lambda v: self.set_volume())
+            scale.grid(row=1, column=1, sticky='e')
+            scale.bind('<ButtonRelease-1>', lambda e: self.remember(volume=self.volume.get()))
+            self.set_volume()
 
         activity = self.card(body, fill='x', pady=(12, 0))
         ttk.Label(activity, text='Activity', style='Section.TLabel').pack(anchor='w')
@@ -1704,10 +1925,17 @@ class App:
         with self.server.cv:
             real = {v: i for i, (v, path, uid) in m.slots.items() if self.portal.slots[v].path == path} if m else {}
             kept = {v for v, path in m.kept.values() if self.portal.slots[v].path == path} if m else set()
-            rows = {n: (n + 1, figure_name(s.data),
+            images = {n: bytes(s.data) for n, s in enumerate(self.portal.slots) if s.path}
+            rows = {n: (n + 1, figure_name(s.data), '',
                         f'Real portal, slot {real[n] + 1}' if n in real else
                         'Kept (real portal unplugged)' if n in kept else 'File', os.path.basename(s.path))
                     for n, s in enumerate(self.portal.slots) if s.path}
+        for n, image in images.items():  # outside the lock: decrypting takes a moment
+            if image not in self.detail_cache:
+                if len(self.detail_cache) > 64:
+                    self.detail_cache.clear()
+                self.detail_cache[image] = stats(figure_info(image))[3:]
+            rows[n] = rows[n][:2] + (self.detail_cache[image],) + rows[n][3:]
         if rows != self.rows:
             self.fit_columns(self.tree, list(rows.values()), self.root, extra=70)
             picked = self.tree.selection()
@@ -1737,6 +1965,8 @@ class App:
                 self.open_restore(select=m.offers.get_nowait())
             while not m.notices.empty():
                 self.alert(m.notices.get_nowait())
+            while not m.repairs.empty():
+                self.offer_repair(m.repairs.get_nowait())
         lines = list(LOG_LINES)
         new = [line for n, line in lines if n > self.log_seen and not self.QUIET.match(line)]
         if lines:
@@ -1751,8 +1981,19 @@ class App:
             if at_end:
                 self.log.see('end')
 
-    def alert(self, msg):
-        """A warning in front of everything, a fullscreen game included; the game gets the focus back after."""
+    def offer_repair(self, uid):
+        data = self.mirror.figure_data(uid)
+        if data is None:  # lifted again already
+            return
+        name, info = figure_name(data), figure_info(data)
+        if self.alert(f'The save on {name} is damaged, so the game will say "A toy on the portal has a problem".\n\n'
+                      f'Repair it now? Its newest save gets valid checksums again and it keeps all its progress{stats(info)}. '
+                      'What it holds now is kept as its backup.', ask=True):
+            self.write(uid, repaired, 'a repair', f'Repairing {name} ({uid}); see the log.')
+
+    def alert(self, msg, ask=False):
+        """A warning (ask: a yes/no question, answered True for yes) in front of everything, a fullscreen game
+        included; the game gets the focus back after."""
         import tkinter as tk
         from tkinter import messagebox
         ctypes.windll.user32.GetForegroundWindow.restype = ctypes.c_void_p
@@ -1763,10 +2004,11 @@ class App:
         holder.geometry(f'1x1+{holder.winfo_screenwidth() // 2}+{holder.winfo_screenheight() // 3}')
         holder.update_idletasks()
         take_foreground(int(holder.wm_frame(), 16))
-        messagebox.showwarning('Portal Bridge', msg, parent=holder)
+        answer = (messagebox.askyesno if ask else messagebox.showwarning)('Portal Bridge', msg, parent=holder)
         holder.destroy()
         if game:
             take_foreground(game)
+        return answer
 
     @staticmethod
     def settings():
@@ -1953,11 +2195,7 @@ class App:
 
     def toggle_write_back(self):
         n = self.mirror.set_write_back(self.wb.get())
-        try:
-            with open(SETTINGS, 'w') as f:
-                json.dump({**self.settings(), 'write_back': self.wb.get()}, f)
-        except OSError as e:
-            log(f'choice not remembered: {e}')
+        self.remember(write_back=self.wb.get())
         self.say('write-back to real figures ' + ('ON' if self.wb.get() else 'off')
                  + (f': catching up {n} block(s) saved earlier' if n else ''))
 
@@ -1987,6 +2225,14 @@ class App:
             return self.picker.lift()
         self.yours = {e[1]: e for e in played()}
         self.health = {}  # uid -> (figure_info of the current copy or None, backup damaged)
+        self.owned = set()  # "id:variant" of every figure in dumps/
+        for name, uid, current, backup, when in self.yours.values():
+            try:
+                with open(current or backup, 'rb') as f:
+                    head = f.read(32)
+                self.owned.add(f'{struct.unpack_from("<H", head, 0x10)[0]}:{struct.unpack_from("<H", head, 0x1C)[0]}')
+            except (OSError, TypeError, struct.error):
+                pass
         for name, uid, current, backup, when in self.yours.values():
             try:
                 with open(current, 'rb') as f:
@@ -2028,7 +2274,9 @@ class App:
             self.tab_buttons[key] = ttk.Radiobutton(tabs, variable=self.tab, value=key, style='Tab.TRadiobutton',
                                                     command=self.switch_tab)
             self.tab_buttons[key].pack(side='left', padx=(0, 4))
-        tk.Frame(body, background=self.LINE, height=1).pack(fill='x')
+        self.summary = ttk.Label(body, style='CardMuted.TLabel')  # All Skylanders: what you have per game
+        self.summary_anchor = tk.Frame(body, background=self.LINE, height=1)
+        self.summary_anchor.pack(fill='x')
 
         table = ttk.Frame(body, style='Card.TFrame')
         table.pack(fill='both', expand=True, pady=(6, 0))
@@ -2036,7 +2284,8 @@ class App:
         for key, cols in (('yours', (('figure', 'FIGURE', 200), ('villain', 'VILLAIN', 120), ('level', 'LEVEL', 55),
                                      ('gold', 'GOLD', 70), ('uid', 'ID', 85), ('played', 'LAST PLAYED', 125),
                                      ('backup', 'BACKUP', 170))),
-                          ('all', (('figure', 'FIGURE', 380), ('kind', 'FIGURE ID', 200)))):
+                          ('all', (('figure', 'FIGURE', 280), ('game', 'GAME', 140), ('element', 'ELEMENT', 90),
+                                   ('owned', 'YOURS', 60)))):
             t = ttk.Treeview(table, columns=[c[0] for c in cols], show='headings', selectmode='browse')
             for c, title, width in cols:
                 t.heading(c, text=title, anchor='w')
@@ -2051,9 +2300,9 @@ class App:
         self.pick_scroll.pack(side='right', fill='y')
         self.nothing = ttk.Label(table, style='CardMuted.TLabel')
 
-        tk.Frame(p, background=self.LINE, height=1).pack(fill='x')
-        bar = ttk.Frame(p, padding=(22, 12))
-        bar.pack(fill='x')
+        bar = ttk.Frame(p, padding=(22, 12))  # packed before the list, so the buttons always keep their room
+        bar.pack(fill='x', side='bottom', before=body)
+        tk.Frame(p, background=self.LINE, height=1).pack(fill='x', side='bottom', before=body)
         ttk.Button(bar, text='Browse files…', command=lambda: (p.destroy(), self.ask_load())).pack(side='left')
         self.actions = {'yours': ttk.Frame(bar), 'all': ttk.Frame(bar)}
         self.pick_current = ttk.Button(self.actions['yours'], text='Load current', style='Accent.TButton',
@@ -2117,9 +2366,9 @@ class App:
                                    uid, time.strftime('%Y-%m-%d %H:%M', time.localtime(when)),
                                    kind + (' (damaged)' if backup_bad else '')), uid in loaded))
         else:
-            rows = [(key, (name, 'id {} · variant {}'.format(*key.split(':'))), False)
+            rows = [(key, (name, *DETAILS.get(key, ('', '')), '✓' if key in self.owned else ''), False)
                     for key, name in sorted(NAMES.items(), key=lambda kv: kv[1].lower())]
-        shown = [r for r in rows if not q or q in r[1][0].lower() or q in r[0]]
+        shown = [r for r in rows if not q or q in r[0] or any(q in str(v).lower() for v in r[1][:3])]
         t = self.lists[self.tab.get()]
         if not getattr(t, 'fitted', False):
             t.fitted = True
@@ -2136,6 +2385,16 @@ class App:
             self.nothing.configure(text=f"No Skylander matches '{self.query.get().strip()}'." if q else
                                    'No figures yet. Place one on the real portal, or create one under All Skylanders.')
             self.nothing.place(relx=0.5, rely=0.4, anchor='center')
+        if self.tab.get() == 'all':  # how much of each game's figures you have
+            games = {}
+            for key, (game, _) in DETAILS.items():
+                games.setdefault(game, [0, 0])[1] += 1
+                games[game][0] += key in self.owned
+            self.summary.configure(text=f'You have {sum(v[0] for v in games.values())} of {len(DETAILS)}:  ' + '   '.join(
+                f'{g} {have}/{total}' for g, (have, total) in games.items()))
+            self.summary.pack(anchor='w', pady=(6, 0), before=self.summary_anchor)
+        else:
+            self.summary.pack_forget()
         self.tab_buttons['yours'].configure(text=f'Your Skylanders ({len(self.yours)})')
         self.tab_buttons['all'].configure(text=f'All Skylanders ({len(NAMES)})')
         self.picker_buttons()
@@ -2171,16 +2430,198 @@ class App:
         self.picker.destroy()
         self.load(path)
 
-    def reset_selected(self):
+    def selected_real(self, what):
+        """(uid, data, name) of the figure selected in the slot table if it is on the real portal, else None."""
         from tkinter import messagebox
         n = next(iter(map(int, self.tree.selection())), None)
         with self.server.cv:
             uid = next((u for i, (v, path, u) in self.mirror.slots.items()
                         if v == n and self.portal.slots[v].path == path), None)
         if uid is None:
-            return messagebox.showinfo('Reset figure', 'Select a figure that is on the real portal first.', parent=self.root)
+            messagebox.showinfo(what, 'Select a figure that is on the real portal first.', parent=self.root)
+            return None
         data = self.mirror.figure_data(uid)
-        name = figure_name(data)
+        return uid, data, figure_name(data)
+
+    def write(self, uid, make, what, done):
+        from tkinter import messagebox
+        try:
+            self.mirror.write_image(uid, make, what)
+        except ValueError as e:
+            return messagebox.showerror('Not written', str(e), parent=self.root)
+        self.say(done)
+
+    def repair_selected(self):
+        from tkinter import messagebox
+        picked = self.selected_real('Repair figure')
+        if not picked:
+            return
+        uid, data, name = picked
+        info = figure_info(data)
+        if not info.damaged:
+            return messagebox.showinfo('Nothing to repair', f'The save on {name} is not damaged.', parent=self.root)
+        if messagebox.askyesno('Repair figure?', (
+                f'Repair {name}{stats(info)}?\n\nIts newest save gets valid checksums again and keeps all its progress, '
+                'as SuperChargers did for Snap Shot. What it holds now is kept as its backup.'), parent=self.root):
+            self.write(uid, repaired, 'a repair', f'Repairing {name} ({uid}); see the log.')
+
+    def edit_selected(self):
+        import tkinter as tk
+        from tkinter import messagebox, ttk
+        picked = self.selected_real('Edit figure')
+        if not picked:
+            return
+        uid, data, name = picked
+        info = figure_info(data)
+        if info.kind != 'skylander':
+            return messagebox.showinfo('Edit figure', f'{name} has no level, gold or nickname to edit '
+                                       '(only Skylanders do; a new figure needs one game save first).', parent=self.root)
+        d = tk.Toplevel(self.root)
+        d.title('Edit figure')
+        d.configure(background=self.CARD)
+        d.transient(self.root)
+        d.resizable(False, False)
+        body = ttk.Frame(d, style='Card.TFrame', padding=(24, 20))
+        body.pack(fill='both')
+        ttk.Label(body, text=name, style='Figure.TLabel').grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 12))
+        nick, gold, level = tk.StringVar(value=info.nickname), tk.StringVar(value=info.gold), tk.StringVar(value=info.level or '')
+        ttk.Label(body, text='Nickname', style='Card.TLabel').grid(row=1, column=0, sticky='w', pady=4)
+        ttk.Entry(body, textvariable=nick, width=24).grid(row=1, column=1, sticky='w', padx=(16, 0))
+        ttk.Label(body, text='Gold (0-65000)', style='Card.TLabel').grid(row=2, column=0, sticky='w', pady=4)
+        ttk.Spinbox(body, from_=0, to=65000, increment=100, textvariable=gold, width=10).grid(row=2, column=1, sticky='w', padx=(16, 0))
+        ttk.Label(body, text='Level (1-20)', style='Card.TLabel').grid(row=3, column=0, sticky='w', pady=4)
+        box = ttk.Spinbox(body, from_=1, to=20, textvariable=level, width=10)
+        box.grid(row=3, column=1, sticky='w', padx=(16, 0))
+        if info.level is None:
+            box.state(['disabled'])  # Imaginators and Swapper bottom halves keep no level here
+
+        def save():
+            try:
+                g = int(gold.get())
+                lv = int(level.get()) if info.level is not None else None
+                if not 0 <= g <= 65000 or (lv is not None and not 1 <= lv <= 20) or len(nick.get()) > 15:
+                    raise ValueError
+            except ValueError:
+                return messagebox.showerror('Edit figure', 'Gold 0-65000, level 1-20, nickname up to 15 letters.', parent=d)
+            changes = {k: v for k, v, old in (('gold', g, info.gold), ('nickname', nick.get(), info.nickname),
+                                              ('level', lv, info.level)) if v != old}
+            d.destroy()
+            if changes:
+                self.write(uid, lambda held: edited(held, **changes), 'edits (' + ', '.join(changes) + ')',
+                           f'Writing {", ".join(changes)} to {name} ({uid}); see the log.')
+        bar = ttk.Frame(d, padding=(24, 0, 24, 18), style='Card.TFrame')
+        bar.pack(fill='x')
+        ttk.Button(bar, text='Write to figure', style='Accent.TButton', command=save).pack(side='right')
+        ttk.Button(bar, text='Cancel', command=d.destroy).pack(side='right', padx=(0, 8))
+        ttk.Label(body, style='CardMuted.TLabel', wraplength=320, justify='left', text=(
+            'Saved the way the game saves: the previous save stays on the figure as its fallback, and what the '
+            'figure holds now is kept as its backup.')).grid(row=4, column=0, columnspan=2, sticky='w', pady=(12, 0))
+
+    def backup_all(self):
+        import zipfile
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(parent=self.root, defaultextension='.zip', filetypes=[('Zip files', '*.zip')],
+                                            initialfile=time.strftime('Skylanders backup %Y-%m-%d.zip'))
+        if not path:
+            return
+        try:
+            with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
+                names = [n for n in os.listdir(DUMPS) if n.endswith('.sky')]
+                for n in names:
+                    z.write(os.path.join(DUMPS, n), n)
+        except OSError as e:
+            return self.say(f'Backup failed: {e}')
+        self.say(f'{len(names)} figure files backed up to {path}')
+
+    def set_volume(self):
+        if getattr(self.server, 'sound', None):
+            self.server.sound.volume = self.volume.get() / 100
+
+    def remember(self, **values):
+        try:
+            with open(SETTINGS, 'w') as f:
+                json.dump({**self.settings(), **values}, f)
+        except OSError as e:
+            log(f'choice not remembered: {e}')
+
+    def open_games(self):
+        """Start a Skylanders game from here, so the bridge is always running first."""
+        import tkinter as tk
+        from tkinter import filedialog, ttk
+        emulators = self.settings().get('emulators') or {}
+        if not emulators:
+            self.say('Looking for Cemu, RPCS3 and Dolphin…')
+            self.root.update()
+            emulators = find_emulators()
+            self.remember(emulators=emulators)
+        d = tk.Toplevel(self.root)
+        d.title('Start a game')
+        d.configure(background=self.CARD)
+        d.transient(self.root)
+        body = ttk.Frame(d, style='Card.TFrame', padding=(22, 18))
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text='Start a game', style='Section.TLabel').pack(anchor='w')
+        ttk.Label(body, style='CardMuted.TLabel', text='The game starts with this bridge already running, '
+                  'so the real portal stays hidden from the emulator.').pack(anchor='w', pady=(4, 10))
+        tree = ttk.Treeview(body, columns=('game', 'emulator', 'path'), show='headings', height=7, selectmode='browse')
+        for c, title in (('game', 'GAME'), ('emulator', 'EMULATOR'), ('path', 'FILE')):
+            tree.heading(c, text=title, anchor='w')
+        tree.pack(fill='both', expand=True)
+        exes = ttk.Frame(body, style='Card.TFrame')
+        exes.pack(fill='x', pady=(12, 0))
+
+        def fill():
+            tree.delete(*tree.get_children())
+            games = find_games(emulators)
+            for k, (title, emulator, path) in enumerate(games):
+                tree.insert('', 'end', iid=path, values=(title, emulator, path), tags=('odd',) if k % 2 else ())
+            tree.tag_configure('odd', background='#fafafa')
+            self.fit_columns(tree, [(t, e, p) for t, e, p in games] or [('', '', '')], d, extra=60)
+            last = self.settings().get('last_game')
+            if tree.get_children():
+                tree.selection_set(last if last in tree.get_children() else tree.get_children()[0])
+            for w in exes.winfo_children():
+                w.destroy()
+            for row, name in enumerate(EMULATOR_EXES):
+                ttk.Label(exes, text=name, style='Card.TLabel').grid(row=row, column=0, sticky='w', pady=2)
+                ttk.Label(exes, text=emulators.get(name, 'not found'), style='CardMuted.TLabel').grid(
+                    row=row, column=1, sticky='w', padx=(12, 12))
+                ttk.Button(exes, text='Change…', command=lambda n=name: choose(n)).grid(row=row, column=2, sticky='e', pady=2)
+            exes.columnconfigure(1, weight=1)
+
+        def choose(name):
+            exe = filedialog.askopenfilename(parent=d, title=f'Where is {name}?', filetypes=[('Programs', '*.exe')])
+            if exe:
+                emulators[name] = os.path.normpath(exe)
+                self.remember(emulators=emulators)
+                fill()
+
+        def start():
+            sel = tree.selection()
+            if not sel:
+                return
+            title, emulator, path = tree.item(sel[0], 'values')
+            self.remember(last_game=path)
+            d.destroy()
+            try:
+                start_game(emulators[emulator], emulator, path)
+            except (OSError, KeyError) as e:
+                self.say(f'Could not start {emulator}: {e}')
+        bar = ttk.Frame(d, padding=(22, 0, 22, 16), style='Card.TFrame')
+        bar.pack(fill='x')
+        ttk.Button(bar, text='Start', style='Accent.TButton', command=start).pack(side='right')
+        ttk.Button(bar, text='Cancel', command=d.destroy).pack(side='right', padx=(0, 8))
+        tree.bind('<Double-1>', lambda e: start())
+        d.bind('<Return>', lambda e: start())
+        d.bind('<Escape>', lambda e: d.destroy())
+        fill()
+
+    def reset_selected(self):
+        from tkinter import messagebox
+        picked = self.selected_real('Reset figure')
+        if not picked:
+            return
+        uid, data, name = picked
         if not messagebox.askyesno('Reset figure?', (
                 f'Erase all progress on {name}{stats(figure_info(data))}?\n\n'
                 'It becomes a figure fresh out of the box: the game asks for a name and it starts again at '
