@@ -76,7 +76,7 @@ SETTINGS = os.path.join(HERE, 'settings.json')  # choices made in the window, ke
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
 USBIP_EXE = r'C:\Program Files\USBip\usbip.exe'
-VERSION = '1.3.0'  # compared with the latest GitHub release at start (latest_release)
+VERSION = '1.3.1'  # compared with the latest GitHub release at start (latest_release)
 RELEASES = 'https://api.github.com/repos/rhsts/skylanders-portal-bridge/releases/latest'
 HIDE_DLL = os.path.join(HERE, 'portal_hide.dll')
 HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe'}  # emulators that get portal_hide.dll
@@ -2337,7 +2337,8 @@ class App:
         need = min(total + extra, window.winfo_screenwidth() - 40)
         if window.winfo_width() < need:
             x = max(0, min(window.winfo_x() - (need - window.winfo_width()) // 2, window.winfo_screenwidth() - need))
-            window.geometry(f'{need}x{window.winfo_height()}+{x}+{window.winfo_y()}')
+            height = max(window.winfo_height(), window.winfo_reqheight())  # never shorter than its contents
+            window.geometry(f'{need}x{height}+{x}+{window.winfo_y()}')
 
     def switch_tab(self):
         for key, t in self.lists.items():
@@ -2576,7 +2577,6 @@ class App:
             for k, (title, emulator, path) in enumerate(games):
                 tree.insert('', 'end', iid=path, values=(title, emulator, path), tags=('odd',) if k % 2 else ())
             tree.tag_configure('odd', background='#fafafa')
-            self.fit_columns(tree, [(t, e, p) for t, e, p in games] or [('', '', '')], d, extra=60)
             last = self.settings().get('last_game')
             if tree.get_children():
                 tree.selection_set(last if last in tree.get_children() else tree.get_children()[0])
@@ -2586,8 +2586,8 @@ class App:
                 ttk.Label(exes, text=name, style='Card.TLabel').grid(row=row, column=0, sticky='w', pady=2)
                 ttk.Label(exes, text=emulators.get(name, 'not found'), style='CardMuted.TLabel').grid(
                     row=row, column=1, sticky='w', padx=(12, 12))
-                ttk.Button(exes, text='Change…', command=lambda n=name: choose(n)).grid(row=row, column=2, sticky='e', pady=2)
             exes.columnconfigure(1, weight=1)
+            self.fit_columns(tree, games or [('', '', '')], d, extra=60)  # last: the window fits everything above
 
         def choose(name):
             exe = filedialog.askopenfilename(parent=d, title=f'Where is {name}?', filetypes=[('Programs', '*.exe')])
@@ -2608,7 +2608,13 @@ class App:
             except (OSError, KeyError) as e:
                 self.say(f'Could not start {emulator}: {e}')
         bar = ttk.Frame(d, padding=(22, 0, 22, 16), style='Card.TFrame')
-        bar.pack(fill='x')
+        bar.pack(fill='x', side='bottom', before=body)  # laid out first: the buttons always stay visible
+        which = tk.Menu(d, tearoff=False)  # one Change button: it asks which emulator
+        for name in EMULATOR_EXES:
+            which.add_command(label=f'{name}…', command=lambda n=name: choose(n))
+        change = ttk.Button(bar, text='Change emulator ▾')
+        change.configure(command=lambda: which.tk_popup(change.winfo_rootx(), change.winfo_rooty() + change.winfo_height()))
+        change.pack(side='left')
         ttk.Button(bar, text='Start', style='Accent.TButton', command=start).pack(side='right')
         ttk.Button(bar, text='Cancel', command=d.destroy).pack(side='right', padx=(0, 8))
         tree.bind('<Double-1>', lambda e: start())
