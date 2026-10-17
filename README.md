@@ -18,6 +18,62 @@ PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the
 - **Trap Team sound** on the Traptanium Portal's own speaker, and the **portal lights** follow the game.
 - **Start your games from PortalSync**, a **Settings** page, a **welcome window** and **dark mode**.
 
+New here? Follow [Getting started](#getting-started): usbip-win2, Zadig, PortalSync, done.
+
+## Getting started
+
+You need Windows 10 or 11 (64-bit), a Skylanders Portal of Power on USB, and Cemu, RPCS3 or Dolphin with a Skylanders game. Setup takes about ten minutes, and you only do it once.
+
+### 1. Install usbip-win2
+
+PortalSync shows its virtual portal to Windows through **usbip-win2**.
+
+1. Download the installer (`USBip-….exe`) from the [usbip-win2 releases](https://github.com/vadimgrn/usbip-win2/releases). Version 0.9.8.1 was tested.
+2. Run it with the default settings, so it installs to `C:\Program Files\USBip`. Allow the driver installation when Windows asks.
+
+### 2. Give the portal a libusb driver with Zadig
+
+Windows treats the portal as a game controller (HID), so PortalSync can't read figures from it yet. Zadig swaps in a driver that PortalSync can use. This only changes the portal on this PC; it still works the same on a console.
+
+1. Plug in the portal.
+2. Download [Zadig](https://zadig.akeo.ie/) and start it. No install is needed.
+3. In the menu, turn on **Options → List All Devices**.
+4. In the drop-down list, choose **Spyro Porta**. Check that the USB ID next to it reads **1430 0150**.
+5. Next to the green arrow, pick **libusbK** as the new driver. Use the small arrows to switch drivers.
+6. Click **Replace Driver** and wait until Zadig says it's done.
+
+To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-click **Spyro Porta**, choose **Uninstall device**, and tick "Attempt to remove the driver for this device". Then unplug the portal and plug it back in, and Windows uses its own driver again.
+
+### 3. Download and start PortalSync
+
+1. Download `PortalSync-….zip` from the [latest release](../../releases/latest) and unzip it to a folder of its own, for example `C:\PortalSync`. Keep the files together: `PortalSync.exe`, `portal_hide.dll`, `portal_descriptors.json`, `figure_names.json` and `figure_details.json`.
+2. Double-click `PortalSync.exe`. If Windows SmartScreen warns, choose **More info → Run anyway**. Some antivirus programs distrust it too, because it's a packed exe that loads a DLL into another program. The source is all here if you'd rather build it yourself.
+3. The **welcome window** opens. Pick light or dark, check that your emulators were found (or pick them with **Browse…**), and press **Start**.
+4. The status at the top right should say **Portal connected**.
+
+### 4. Set up your emulator once
+
+- **Cemu:** nothing to set. In the Cemu hybrid build, keep the *Hybrid* checkbox off.
+- **Dolphin:** under **Config → Wii → Whitelisted USB Passthrough Devices**, click **Add…** and choose `1430:0150`. Keep Dolphin's own emulated Skylanders portal off.
+- **RPCS3:** nothing to set. Just make sure PortalSync is running before the game boots.
+
+### 5. Play
+
+1. In PortalSync, click **Start game…**, pick your game and click **Start**. Or start PortalSync first and then the game yourself.
+2. Put figures on the real portal. They show up in the game within about a second, and your progress is saved back onto the figures.
+3. Right-click a figure in the list for more options, and use **Settings…** for everything else.
+
+### If something doesn't work
+
+| What you see | What to do |
+| --- | --- |
+| The game says **"too many Portals"** | The game was started before PortalSync. Close the game, start PortalSync first (or use **Start game…**), then start the game again. Also check that `portal_hide.dll` is next to `PortalSync.exe`. |
+| Status **"Portal not plugged in"** or **"Looking for the portal"** | Check the USB cable, and redo step 2. The portal must have the libusbK driver, not its standard one. |
+| Status **"Portal in use by Cemu.exe"** (or another emulator) | The emulator took the portal first. Stop the game, unplug the portal and plug it back in, and start the game again. |
+| PortalSync stops with **"attach failed"** | usbip-win2 isn't installed, or isn't in `C:\Program Files\USBip`. Redo step 1. |
+| PortalSync stops with **"Port 3240 is in use"** | PortalSync is already running. Look for its window or on the taskbar. |
+| The game says **"A toy on the portal has a problem"** | The figure's save is damaged. PortalSync offers a repair when you place it. You can also right-click the figure and choose **Repair damaged save…**. |
+
 ## Screenshots
 
 | | |
@@ -93,22 +149,9 @@ PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the
 
 All of them were tested with a Traptanium Portal (USB ID `1430:0150`) on Windows 11.
 
-## Requirements
+## Building from source
 
-- Windows 10 or 11, 64-bit.
-- [usbip-win2](https://github.com/vadimgrn/usbip-win2), tested with 0.9.8.1, installed in `C:\Program Files\USBip`.
-- The real portal on a libusb-compatible driver. Install **libusbK** (or WinUSB) for `Spyro Porta` (`1430:0150`) with [Zadig](https://zadig.akeo.ie/).
-
-## Install
-
-### The exe (easiest)
-
-1. Download the zip from the [latest release](../../releases/latest) and unzip it to a folder of its own. The folder holds `PortalSync.exe`, `portal_hide.dll`, `portal_descriptors.json`, `figure_names.json` and `figure_details.json`; keep them together.
-2. Double-click `PortalSync.exe`. The welcome window asks for a few choices, and your figures go to a `dumps` folder next to it.
-
-Some antivirus programs distrust exes packed with PyInstaller, and programs that load a DLL into another process. Both are what PortalSync does, so it may be flagged. You can check the source here and build both files yourself.
-
-### From source
+To run it from the source instead of the exe (steps 1, 2 and 4 of Getting started still apply):
 
 ```
 pip install -r requirements.txt
@@ -120,22 +163,6 @@ Python 3.13 was used. To build the exe and the DLL together, install PyInstaller
 ```
 cl /nologo /O2 /LD portal_hide.c cfgmgr32.lib
 ```
-
-## Usage
-
-1. Plug in the real portal.
-2. Start PortalSync **before** the emulator boots a game. The easiest way is to use **Start game…**.
-3. Place figures on the real portal. Each one appears in the game.
-
-Close the window to stop. That disconnects the virtual portal.
-
-If a game was already running when you started PortalSync, the game holds the real portal, and PortalSync shows a pop-up. To fix it, stop the game, unplug and replug the real portal, and start the game again.
-
-### Emulator settings
-
-- **Cemu:** no settings needed. In the Cemu hybrid build, keep the *Hybrid* checkbox off.
-- **RPCS3:** start PortalSync before booting the game. With no portal at boot, RPCS3 adds its own emulated portal.
-- **Dolphin:** add `1430:0150` to the USB passthrough whitelist, and keep Dolphin's own emulated Skylanders portal off.
 
 ## How it works
 
