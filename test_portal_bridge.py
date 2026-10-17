@@ -593,6 +593,71 @@ def stale_reads():
         assert Stale(bytes(data)).read_figure(0) == bytes(data)
 
 
+def settings_logic():
+    """What the Settings page changes: backups per figure, sound mode, lights, fullscreen start, figures folder."""
+    with tempfile.TemporaryDirectory() as d:
+        settings, pb.SETTINGS = pb.SETTINGS, os.path.join(d, 'settings.json')
+        try:  # saving one choice keeps the others
+            pb.App.remember(pb.App, volume=40)
+            pb.App.remember(pb.App, dark=True)
+            pb.App.remember(pb.App, volume=60)
+            assert pb.App.settings() == {'volume': 60, 'dark': True}
+        finally:
+            pb.SETTINGS = settings
+        pb.DUMPS = d
+        trash = fake_bin(d)
+        image = figure('86bc1263')
+        names = ['Zook (86bc1263) - original.sky'] + [f'Zook (86bc1263) - saved 2026-10-1{k} 10.00.00.sky' for k in range(4)]
+        for name in names:
+            pb.save_dump(os.path.join(d, name), image)
+        pb.BACKUPS_KEPT = 3
+        try:
+            pb.keep_one_backup('86bc1263')
+        finally:
+            pb.BACKUPS_KEPT = 1
+        assert sorted(os.listdir(trash)) == sorted(names[:2])  # the three newest stay
+
+        src, dst = os.path.join(d, 'old'), os.path.join(d, 'new')
+        os.makedirs(src)
+        os.makedirs(dst)
+        for name in ('A (11111111) - current.sky', 'B (22222222) - current.sky', 'notes.txt'):
+            open(os.path.join(src, name), 'w').write(name)
+        open(os.path.join(dst, 'A (11111111) - current.sky'), 'w').write('already there')
+        assert pb.move_dumps(src, dst) == 2
+        assert sorted(os.listdir(dst)) == ['A (11111111) - current-2.sky', 'A (11111111) - current.sky', 'B (22222222) - current.sky']
+        assert os.listdir(src) == ['notes.txt'] and open(os.path.join(dst, 'A (11111111) - current.sky')).read() == 'already there'
+
+    played = []
+    sound = pb.PortalSound(speaker=lambda block: played.append(block) or True)
+    sound.pc = lambda block: played.append(b'pc')
+    sound.feed(bytes(64))
+    sound.mode = 'pc'
+    sound.feed(bytes(64))
+    sound.mode = 'off'
+    sound.feed(bytes(64))
+    assert played == [bytes(64), b'pc']
+
+    server = Server(Portal(DESC.r_reply), DESC)
+    m = pb.Mirror(server, vhci_bus=3)
+    m.real = FakeReal({})
+    m.on_command(b'C\xff\x00\x00')
+    m.lights = False
+    m.on_command(b'C\x00\xff\x00')
+    m.on_command(b'M\x01')
+    assert [j[1][:2] for j in list(m.jobs.queue)] == [b'C\xff', b'M\x01']  # lights off: colour dropped, speaker kept
+
+    calls = []
+    real_popen, pb.subprocess.Popen = pb.subprocess.Popen, lambda args, cwd: calls.append(args) or SimpleNamespace(poll=lambda: 0, pid=0)
+    try:
+        for emulator in ('Cemu', 'Dolphin', 'RPCS3'):
+            pb.start_game(r'C:\emu\x.exe', emulator, r'F:\game', fullscreen=True)
+        pb.start_game(r'C:\emu\x.exe', 'Cemu', r'F:\game')
+    finally:
+        pb.subprocess.Popen = real_popen
+    assert [c[1:] for c in calls] == [['-f', '-g', r'F:\game'], ['-C', 'Dolphin.Display.Fullscreen=True', '-e', r'F:\game'],
+                                      ['--no-gui', '--fullscreen', r'F:\game'], ['-g', r'F:\game']]
+
+
 def main():
     reading(pb.figure_info)
     pb.figure_info = lambda data: SimpleNamespace(kind='other', level=None, gold=None, nickname='', damaged=False,
@@ -606,6 +671,7 @@ def main():
     speaker()
     lifted_mid_write()
     stale_reads()
+    settings_logic()
     creating()
     game_first()
     contention()
