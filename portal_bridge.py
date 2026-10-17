@@ -2398,7 +2398,7 @@ class App:
             self.tab_buttons[key] = ttk.Radiobutton(tabs, variable=self.tab, value=key, style='Tab.TRadiobutton',
                                                     command=self.switch_tab)
             self.tab_buttons[key].pack(side='left', padx=(0, 4))
-        self.summary = ttk.Label(body, style='CardMuted.TLabel')  # All Skylanders: what you have per game
+        self.summary = ttk.Label(body, style='CardMuted.TLabel', wraplength=740)  # All Skylanders: what you have per game
         self.summary_anchor = tk.Frame(body, background=self.LINE, height=1)
         self.summary_anchor.pack(fill='x')
 
