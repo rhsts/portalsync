@@ -12,3 +12,5 @@ dist/
 *.obj
 *.exp
 *.lib
+# Figure pictures (Activision artwork): only ever on your own PC, never in the repository
+thumbnails/

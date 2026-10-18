@@ -706,6 +706,12 @@ def extras():
         assert pb.progress_history('86bc1263')[0][0] == '2026-10-01 10:00'
         pb.record_progress(zook, pb.figure_info(zook))  # back to 100 gold: a new line
         assert len(pb.progress_rows()) == 3
+        older, newer = (pb.figure_info(saved_figure('86bc1263', xp, gold=g)) for xp, g in (((24800, 0), 50), ((33000, 10203), 100)))
+        assert pb.compare_progress(older, newer) == 'less progress: level 9 (the figure: 11)'
+        assert pb.compare_progress(newer, older) == 'more progress: level 11 (the figure: 9)'
+        richer = pb.figure_info(saved_figure('86bc1263', (33000, 10203), gold=400))
+        assert pb.compare_progress(richer, newer) == 'same level, +300 gold'
+        assert pb.compare_progress(newer, newer, same=True) == 'same as the figure'
 
         z = io.BytesIO()  # the update installer: new files in place, old ones as .old, settings untouched
         with zipfile.ZipFile(z, 'w') as zf:
@@ -731,8 +737,28 @@ def extras():
                          'settings.json': b'old'}, files
 
 
+def setup_checking():
+    # The setup checker reads the portal's driver from the devices Windows lists (the virtual portal is HID too).
+    real = pb.portal_pnp
+    try:
+        cases = {'driver done': [('libusbk devices', 'USB\\VID_1430&PID_0150\\6&1')],
+                 'no driver yet': [('HIDClass', 'USB\\VID_1430&PID_0150\\6&1')],
+                 'only the virtual one': [('HIDClass', 'USB\\VID_1430&PID_0150\\2&9')], 'nothing': []}
+        got = {}
+        for name, devices in cases.items():
+            pb.portal_pnp = lambda devices=devices: devices
+            got[name] = [ok for _, ok, _ in pb.setup_checks(True, {})][1:3]  # plugged in, driver
+        assert got == {'driver done': [True, True], 'no driver yet': [False, None],
+                       'only the virtual one': [False, None], 'nothing': [False, None]}, got
+        pb.portal_pnp = lambda: [('HIDClass', 'x')]
+        assert [ok for _, ok, _ in pb.setup_checks(False, {})][1:3] == [True, False]  # before attaching: needs Zadig
+    finally:
+        pb.portal_pnp = real
+
+
 def main():
     reading(pb.figure_info)
+    setup_checking()
     extras()
     pb.figure_info = lambda data: SimpleNamespace(kind='other', level=None, gold=None, nickname='', damaged=False,
                                                   old_damaged=False)  # the other tests' saves are made-up bytes

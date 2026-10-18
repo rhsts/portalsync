@@ -61,16 +61,18 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 
 1. In PortalSync, click **Start game…**, pick your game and click **Start**. Or start PortalSync first and then the game yourself.
 2. Put figures on the real portal. They show up in the game within about a second, and your progress is saved back onto the figures.
-3. Right-click a figure in the list for more options, and use **Settings…** for everything else.
+3. Click a figure in the list to see its details below the list, right-click it for more options, and use **Settings…** for everything else.
 
 ### If something doesn't work
+
+First try **Settings… → Check setup…**. It checks usbip-win2, the portal and its driver, the virtual portal and your emulators, and says what to do for anything that's missing. If PortalSync can't start at all, it opens that check by itself.
 
 | What you see | What to do |
 | --- | --- |
 | The game says **"too many Portals"** | The game was started before PortalSync. Close the game, start PortalSync first (or use **Start game…**), then start the game again. Also check that `portal_hide.dll` is next to `PortalSync.exe`. |
 | Status **"Portal not plugged in"** or **"Looking for the portal"** | Check the USB cable, and redo step 2. The portal must have the libusbK driver, not its standard one. |
 | Status **"Portal in use by Cemu.exe"** (or another emulator) | The emulator took the portal first. Stop the game, unplug the portal and plug it back in, and start the game again. |
-| PortalSync stops with **"attach failed"** | usbip-win2 isn't installed, or isn't in `C:\Program Files\USBip`. Redo step 1. |
+| **"PortalSync can't start yet"** | Something it needs is missing; the window says what. Usually usbip-win2 isn't installed, or isn't in `C:\Program Files\USBip`. Redo step 1. |
 | PortalSync stops with **"Port 3240 is in use"** | PortalSync is already running. Look for its window or on the taskbar. |
 | The game says **"A toy on the portal has a problem"** | The figure's save is damaged. PortalSync offers a repair when you place it. You can also right-click the figure and choose **Repair damaged save…**. |
 
@@ -79,17 +81,20 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 | | |
 | --- | --- |
 | ![Add a Skylander: your figures with level, gold and villain](docs/add.png) | ![All Skylanders, filtered on Trap Team](docs/collection.png) |
-| **Add Skylander**: your figures, with level, gold and the villain in a trap. | **All Skylanders**: 591 figures. Click a game, or use the drop-down, to filter. |
+| **Add Skylander**: your figures, with level, gold and the villain in a trap. | **All Skylanders**: 591 figures, filtered by game, element and what you have. |
 | ![Teams](docs/teams.png) | ![Right-click a figure](docs/menu.png) |
-| **Teams**: save the figures on the portal and load them back in one click. | **Right-click a figure**: unload, replace, progress history, edit, repair, reset or restore. |
+| **Teams**: save the figures on the portal and load them back in one click. | **Right-click a figure**: unload, replace, progress history, backups, edit, repair, reset or restore. |
 | ![Progress history](docs/history.png) | ![The restore pop-up](docs/restore.png) |
 | **Progress history**: a figure's level and gold over time. | **Restore**: put newer progress back on a figure, one figure at a time. |
+| ![Backups](docs/backups.png) | ![Edit a team](docs/team_edit.png) |
+| **Backups**: each backup compared with the figure. | **Edit a team**: rename it, take figures out or add the ones on the portal. |
 | ![Settings](docs/settings.png) | ![Test portal](docs/portal_test.png) |
 | **Settings**: hover over or click a **?** for an explanation. | **Test portal**: which slots hold a figure, plus the lights and a test tone. |
 | ![Start a game](docs/games.png) | ![The welcome window](docs/welcome.png) |
 | **Start game**: your Skylanders games from Cemu, RPCS3, Dolphin and shadPS4. | **Welcome window** on the first start. |
 | ![Dark mode](docs/dark.png) | |
-| **Dark mode**, with the SAVE column: which saves are on the real figure. | |
+| **Dark mode**, with the SAVE column: which saves are on the real figure. | ![Check setup](docs/setup_check.png) |
+| | **Check setup**: everything PortalSync needs, with what to do when something is missing. |
 
 ## Features
 
@@ -106,12 +111,16 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 
 - **Add Skylander** (no file explorer needed):
   - **Your Skylanders:** every figure you've played, with level, gold, nickname, the villain in a trap, when it was last played, and its backup. Load its current copy or its backup.
-  - **All Skylanders:** 591 figures, the Imaginators Senseis and the Creation Crystals included, with game, element and a tick for the ones you have, plus a count per game. **Create new figure** makes a blank one, fresh out of the box, like Dolphin and RPCS3 do.
-  - **Teams:** **Save portal as team…** keeps the figures now on the virtual portal under a name. **Load team** puts them all back at once.
+  - **All Skylanders:** 591 figures, the Imaginators Senseis and the Creation Crystals included, with game and element, plus a count per game of the ones you own. **Create new figure** makes a blank one, fresh out of the box, like Dolphin and RPCS3 do.
+  - **Teams:** **Save portal as team…** keeps the figures now on the virtual portal under a name. **Load team** puts them all back at once. **Edit…** renames a team, takes figures out or adds the ones on the portal now, and a missing file is marked.
   - **Swapper halves come together:** loading or creating one half of a Swap Force Swapper also brings its other half, unless a half of that kind is on the portal already.
-  - **Search** by name, ID, game or element, and **filter by game** (Spyro's Adventure to Imaginators): pick one in the drop-down, or click a game in the "You have … of …" line. Click it again for all games.
+  - **What you have:** the **YOU HAVE** column says **✓ Physical** (read from your real portal) or **On PC** (only a file: created or imported). The count ("You own 4 of 591") only counts physical figures.
+  - **Favourites:** **★ Favourite** puts a ★ before a figure's name, in both lists, and the **Favourites** filter shows only those.
+  - **Pictures (optional):** with a `thumbnails` folder next to `PortalSync.exe`, holding a picture per figure named `<figure ID>_<variant>.png` (for example `25_0.png` for Zook), Add Skylander gets a **Table / Pictures** switch. The pictures are not included: the artwork belongs to Activision.
+  - **Search** by name, ID, game or element, and **filter** by game, element and what you have. Click a game in the "You own … of …" line to filter on it, and click a column heading to sort.
   - **Browse files…** for any other `.sky` file, or **drag and drop** `.sky` files onto the window.
 - **Details** in the main window: level and gold, or "holds Bad Juju" for a trap.
+- **Details panel** under the list: click a figure to see its ID, level and gold, where its saves are and what that means, its file and its backup.
 - **Imaginators:** real Senseis and Creation Crystals are named and work as usual. A *created* Imaginators figure needs a patch, because the game checks a signature that only factory-made figures have: in Cemu, turn on the *Signature Patch* graphic pack (Skylanders Imaginators → Mods). RPCS3 has no such patch yet.
 - **Trap Team traps:** PortalSync shows which villain is inside, and which villains it held before. The 46 villain IDs come from the game's own files.
 
@@ -120,13 +129,14 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 - **Write saves to real figures** (on by default). Only data blocks are written, and every block is read back to check it.
   - **Retries:** a save that fails is tried up to three times, and a newer save replaces an older retry. The status line shows retries and failures.
   - **Nothing invalid reaches the figure:** invalid or incomplete writes from the game are refused first.
-- **SAVE column** in the main window: "✓ on figure", "saving 2 blocks", "FAILED", or "on PC" for a figure loaded from a file.
+- **SAVE column** in the main window: **✓ Saved to figure**, **Saving… keep on portal**, **Saved on PC only** (a figure from a file, or write-back off) or **Needs attention**. The details panel says what each one means and what to do.
 - **Backups** in the `dumps` folder, named after the character, for example `Zook (86bc1263) - original.sky`.
   - Keep 1 to 10 per figure. Older ones go to the Recycle Bin, never straight to deletion.
   - An empty, cut-off or damaged copy never replaces an intact backup.
   - **Daily backup zip:** once a day, every figure file goes into `dumps\daily backups\Skylanders <date>.zip`. The last 7 are kept.
 - **Progress history:** PortalSync notes a Skylander's level and gold each time they change (`dumps\progress.csv`). Right-click a figure → **Progress history…** shows them as a list and a chart, together with its backups.
-- **Restore progress:** when a figure you place is behind its saved copy, a pop-up offers to write that progress onto the figure. What the figure held is kept as its backup, so a restore can be undone.
+- **Backups:** right-click a figure → **Backups…** lists its backups, newest first, with level, gold, nickname and how each compares with the figure ("more progress: level 12 (the figure: 11)"). **Put on figure** writes one onto the real figure, and says which way it goes before it does.
+- **Restore progress:** when a figure you place is behind its saved copy, a pop-up offers to write that progress onto the figure. It says whether the backup has more or less progress than the figure. What the figure held is kept as its backup, so a restore can be undone.
 - **Damaged saves:** when a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". PortalSync warns you as soon as such a figure is placed and offers a **repair** that keeps all its progress.
 - **Right-click a figure:** **Unload**, **Replace with…** (a figure from a file swaps for another one in the same window), and **Progress history…**. For a figure on the real portal also these, each written like a restore: backup first, then every block checked.
   - **Edit gold, nickname, level…**: up to level 20, saved the way the game saves, with the previous save kept as its fallback.
@@ -145,10 +155,10 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 
 - **Settings…** page. All choices are remembered, and a **?** next to an option explains it.
   - **Saving:** write saves to figures, the restore pop-up, the daily backup zip, backups per figure, and the figures folder (for example on OneDrive; your files move there on the next start).
-  - **Sound and lights**, and **Test portal…**.
+  - **Sound and lights**, **Test portal…** and **Check setup…**.
   - **Emulators:** a path box with **Browse…** for each one, and fullscreen start.
-  - **Window:** show log, dark mode, and the update check.
-- **Welcome window** on the first start, with the main choices. Dark mode chosen there is used straight away.
+  - **Window:** show log, dark mode, and the update check. The Activity log can also be folded up with a click on its title.
+- **Welcome window** on the first start, with the main choices and the setup check. Dark mode chosen there is used straight away.
 - **Updates:** when a newer release is out, a link appears in the window. Click it and PortalSync downloads the release from this repository, puts the new files in place and restarts. Your figures and settings stay as they are.
 
 ## Tested
