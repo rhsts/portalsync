@@ -80,10 +80,10 @@ SETTINGS = os.path.join(HERE, 'settings.json')  # choices made in the window, ke
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
 USBIP_EXE = r'C:\Program Files\USBip\usbip.exe'
-VERSION = '1.5.0'  # compared with the latest GitHub release at start (latest_release)
+VERSION = '1.5.1'  # compared with the latest GitHub release at start (latest_release)
 RELEASES = 'https://api.github.com/repos/rhsts/portalsync/releases/latest'
 HIDE_DLL = os.path.join(HERE, 'portal_hide.dll')
-HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe'}  # emulators that get portal_hide.dll
+HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe', 'shadps4.exe'}  # emulators that get portal_hide.dll
 RUNNING_EMULATORS = {}  # pid -> exe name of the HIDE_FROM emulators running now (watch_emulators)
 STATUS_PERIOD = 0.01  # seconds between 'S' reports while the host polls; Cemu's emulated portal uses 10 ms
 EPIPE, ECONNRESET = 32, 104  # Linux errno values, as USB/IP expects
@@ -873,7 +873,10 @@ class Server:
 
     def serve(self, listener):
         while True:
-            conn, _ = listener.accept()
+            try:
+                conn, _ = listener.accept()
+            except OSError:  # main() closed the listener: PortalSync is shutting down (an uncaught error here
+                return       # printed a traceback while Python shut down, and Python then crashed, 2026-10-18)
             conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             threading.Thread(target=self.handle, args=(conn,), daemon=True).start()
 
@@ -1155,11 +1158,12 @@ class Mirror:
         self.lights = True  # Settings: the real portal's lights follow the game
         self.audio_lock = threading.Lock()  # play() writes from the USB/IP thread; release() closes the handle
         self.present = set()  # real slots with a figure on them, from the last poll
+        self.stopping = False  # main() sets it at exit, then waits for run() to end
         self.state = 'real portal: looking'
         server.portal.on_command = self.on_command
 
     def run(self):
-        while True:
+        while not self.stopping:
             try:
                 self.poll()
             except OSError as e:  # unplugged, taken by another program, or any USB error
@@ -1801,17 +1805,19 @@ def accept_drops(hwnd, on_files):
     return proc
 
 
-EMULATOR_EXES = {'Cemu': ('Cemu.exe', 'Cemu_release.exe'), 'RPCS3': ('rpcs3.exe',), 'Dolphin': ('Dolphin.exe',)}
+EMULATOR_EXES = {'Cemu': ('Cemu.exe', 'Cemu_release.exe'), 'RPCS3': ('rpcs3.exe',), 'Dolphin': ('Dolphin.exe',),
+                 'shadPS4': ('shadPS4.exe',)}
 
 
-def find_emulators():
+def find_emulators(names=EMULATOR_EXES):
     """{emulator: exe} found in the usual places, up to three folders deep."""
     home = os.path.expanduser('~')
     roots = [os.path.join(home, x) for x in ('Documents', 'Desktop', 'Downloads')]
     roots += [os.environ.get(x, '') for x in ('LOCALAPPDATA', 'ProgramFiles', 'ProgramFiles(x86)')]
+    roots += [os.path.join(os.environ.get('APPDATA', ''), 'shadPS4QtLauncher', 'versions')]  # the launcher's builds
     roots += [f'{c}:\\' for c in 'CDEFG' if os.path.isdir(f'{c}:\\')]
     found = {}
-    for name, exes in EMULATOR_EXES.items():
+    for name, exes in ((n, EMULATOR_EXES[n]) for n in names):
         hits = [h for r in roots if r for exe in exes for depth in range(4)
                 for h in glob.glob(os.path.join(glob.escape(r), *['*'] * depth, exe))]
         if hits:
@@ -1830,9 +1836,23 @@ def title_of(path):
     return re.sub(r'\s+', ' ', re.sub(r'\[.*?\]|\(.*?\)|™', '', name)).strip()
 
 
+def sfo_title(path):
+    """The TITLE of a PS4 game's sce_sys/param.sfo, or None."""
+    try:
+        with open(path, 'rb') as f:
+            b = f.read()
+        key_table, data_table, count = struct.unpack_from('<III', b, 8)
+        for i in range(count):
+            key, _, length, _, at = struct.unpack_from('<HHIII', b, 20 + 16 * i)
+            if b[key_table + key:b.index(0, key_table + key)] == b'TITLE':
+                return b[data_table + at:data_table + at + length].rstrip(b'\0').decode('utf-8', 'replace')
+    except (OSError, ValueError, struct.error):
+        return None
+
+
 def find_games(emulators):
     """[(title, emulator, path)] of the Skylanders games each emulator knows, from its own settings:
-    Cemu's GamePaths, RPCS3's games.yml, Dolphin's ISOPath folders."""
+    Cemu's GamePaths, RPCS3's games.yml, Dolphin's ISOPath folders, shadPS4's game folders."""
     games = []
     cemu = emulators.get('Cemu')
     if cemu:
@@ -1877,6 +1897,20 @@ def find_games(emulators):
             for path in glob.glob(os.path.join(glob.escape(folder), '*')):
                 if 'skylanders' in path.lower() and re.search(r'\.(iso|wbfs|rvz|gcz|ciso|wia)$', path, re.I):
                     games.append((title_of(path), 'Dolphin', path))
+    shad = emulators.get('shadPS4')
+    if shad:
+        config = os.path.join(os.path.dirname(shad), 'user', 'config.json')  # portable, else the user folder
+        config = config if os.path.exists(config) else os.path.join(os.environ.get('APPDATA', ''), 'shadPS4', 'config.json')
+        try:
+            with open(config, encoding='utf-8-sig') as f:
+                folders = [d['path'] for d in json.load(f)['General']['install_dirs'] if d.get('enabled', True)]
+        except (OSError, ValueError, KeyError, TypeError):
+            folders = []
+        for folder in folders:
+            for game in glob.glob(os.path.join(glob.escape(folder), '*', 'sce_sys', 'param.sfo')):
+                title, eboot = sfo_title(game), os.path.join(os.path.dirname(os.path.dirname(game)), 'eboot.bin')
+                if title and 'skylanders' in title.lower() and os.path.exists(eboot):
+                    games.append((re.sub(r'\s+', ' ', title.replace('™', '')).strip(), 'shadPS4', eboot))
     unique = {}
     for title, emulator, path in games:  # the same game in two folders: the first one listed
         unique.setdefault((title, emulator), path)
@@ -1890,10 +1924,12 @@ def start_game(exe, emulator, path, fullscreen=False):
         args = (['-C', 'Dolphin.Display.Fullscreen=True'] if fullscreen else []) + ['-e', path]
     elif emulator == 'Cemu':
         args = (['-f'] if fullscreen else []) + ['-g', path]
+    elif emulator == 'shadPS4':
+        args = (['-f', 'true'] if fullscreen else []) + ['-g', path]
     else:  # RPCS3 only goes fullscreen without its own window
         args = (['--no-gui', '--fullscreen'] if fullscreen else []) + [path]
     proc = subprocess.Popen([exe, *args], cwd=os.path.dirname(exe))
-    log(f'started {os.path.basename(exe)} with {title_of(path)}')
+    log(f'started {os.path.basename(exe)} with {sfo_title(os.path.join(os.path.dirname(path), "sce_sys", "param.sfo")) or title_of(path)}')
 
     def hide():
         for _ in range(300):  # every 50 ms for 15 s; the 1-second watch_emulators also keeps trying
@@ -3504,12 +3540,16 @@ class App:
     def emulators(self):
         """{emulator: exe} from settings.json; looked for on the first use (find_emulators)."""
         emulators = self.settings().get('emulators') or {}
+        new = [n for n in EMULATOR_EXES if n not in emulators and n not in self.settings().get('looked_for', [])]
+        if emulators and new:  # an emulator PortalSync learned later (shadPS4 in 1.5.1): looked for once
+            emulators.update(find_emulators(new))
+            self.remember(emulators=emulators, looked_for=list(EMULATOR_EXES))
         if not emulators:
             if hasattr(self, 'status'):  # not yet there on the first start (welcome window)
                 self.say('Looking for Cemu, RPCS3 and Dolphin…')
                 self.root.update()
             emulators = find_emulators()
-            self.remember(emulators=emulators)
+            self.remember(emulators=emulators, looked_for=list(EMULATOR_EXES))
         return emulators
 
     def open_games(self):
@@ -3635,7 +3675,7 @@ def main():
     rc, out = usbip('attach', '-r', HOST, '-b', BUSID)
     if rc != 0:
         raise SystemExit('attach failed')
-    port = re.search(r'port\D*(\d+)', out)
+    port, mirror = re.search(r'port\D*(\d+)', out), None
     try:
         vhci_bus = None  # the virtual portal is the 1430:0150 that appears after attach
         for _ in range(50):
@@ -3643,7 +3683,6 @@ def main():
             if vhci_bus is not None:
                 break
             time.sleep(0.1)
-        mirror = None
         if vhci_bus is None:
             log('virtual portal not visible to libusb: real portal mirroring off')
         else:
@@ -3654,7 +3693,8 @@ def main():
                 threading.Thread(target=watch_emulators, daemon=True).start()
             else:
                 log('portal_hide.dll not built: emulators will also see the real portal')
-            threading.Thread(target=mirror.run, daemon=True).start()
+            mirror.thread = threading.Thread(target=mirror.run, daemon=True)
+            mirror.thread.start()
         app = App(server, mirror, first_start=not App.settings().get('setup_done'))
         for p in sys.argv[1:]:
             app.load(p)
@@ -3667,6 +3707,10 @@ def main():
         tick()
         app.root.mainloop()
     finally:
+        if mirror:  # let go of the real portal first: Python cleaning up libusb under a running read crashed it
+            mirror.stopping = True
+            mirror.thread.join(3)
+            mirror.release()
         if port:
             usbip('detach', '-p', port.group(1))
         listener.close()

@@ -649,13 +649,21 @@ def settings_logic():
     calls = []
     real_popen, pb.subprocess.Popen = pb.subprocess.Popen, lambda args, cwd: calls.append(args) or SimpleNamespace(poll=lambda: 0, pid=0)
     try:
-        for emulator in ('Cemu', 'Dolphin', 'RPCS3'):
+        for emulator in ('Cemu', 'Dolphin', 'RPCS3', 'shadPS4'):
             pb.start_game(r'C:\emu\x.exe', emulator, r'F:\game', fullscreen=True)
         pb.start_game(r'C:\emu\x.exe', 'Cemu', r'F:\game')
     finally:
         pb.subprocess.Popen = real_popen
     assert [c[1:] for c in calls] == [['-f', '-g', r'F:\game'], ['-C', 'Dolphin.Display.Fullscreen=True', '-e', r'F:\game'],
-                                      ['--no-gui', '--fullscreen', r'F:\game'], ['-g', r'F:\game']]
+                                      ['--no-gui', '--fullscreen', r'F:\game'], ['-f', 'true', '-g', r'F:\game'],
+                                      ['-g', r'F:\game']]
+    with tempfile.TemporaryDirectory() as d:  # a PS4 game's title, from a param.sfo laid out as the PS4 does
+        keys, data = b'TITLE\0TITLE_ID\0\0\0', b'Skylanders Imaginators\0\0CUSA05158\0\0\0'
+        sfo = (struct.pack('<IIIII', 0x46535000, 0x101, 20 + 32, 20 + 32 + len(keys), 2)
+               + struct.pack('<HHIII', 0, 0x204, 23, 24, 0) + struct.pack('<HHIII', 6, 0x204, 10, 12, 24) + keys + data)
+        open(os.path.join(d, 'param.sfo'), 'wb').write(sfo)
+        assert pb.sfo_title(os.path.join(d, 'param.sfo')) == 'Skylanders Imaginators'
+        assert pb.sfo_title(os.path.join(d, 'missing.sfo')) is None
 
 
 def extras():

@@ -1,6 +1,6 @@
 # PortalSync
 
-Use one real Skylanders Portal of Power with **Cemu** (Wii U), **RPCS3** (PS3) and **Dolphin** (Wii) on Windows, and keep your game progress on your real figures. Play your real figures and `.sky` figures from your PC at the same time.
+Use one real Skylanders Portal of Power with **Cemu** (Wii U), **RPCS3** (PS3), **Dolphin** (Wii) and **shadPS4** (PS4) on Windows, and keep your game progress on your real figures. Play your real figures and `.sky` figures from your PC at the same time.
 
 PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the real portal is copied into the virtual portal, and the emulator talks only to the virtual one. Game saves go back onto the real figure. The real portal can stay plugged in the whole time: a small DLL hides it from the emulators, so games never say "too many Portals".
 
@@ -9,7 +9,7 @@ PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the
 ## Highlights
 
 - **Real and virtual figures together:** play figures from the real portal and `.sky` figures from your PC at the same time, up to 16. Save **teams** of figures and load them in one click.
-- **One portal for three emulators:** Cemu, RPCS3 and Dolphin, with the real portal plugged in.
+- **One portal for four emulators:** Cemu, RPCS3, Dolphin and shadPS4, with the real portal plugged in.
 - **Your progress stays on your figures:** game saves are written back to the real figure, and every block is checked.
 - **Backups of every figure**, a daily backup zip, and a pop-up to put newer progress back when a figure is behind its copy. A **SAVE** column shows whether each save has reached the figure.
 - **See inside your figures:** level, gold, nickname, the villain inside a Trap Team trap, and each Skylander's **progress history**.
@@ -21,7 +21,7 @@ New here? Follow [Getting started](#getting-started): usbip-win2, Zadig, PortalS
 
 ## Getting started
 
-You need Windows 10 or 11 (64-bit), a Skylanders Portal of Power on USB, and Cemu, RPCS3 or Dolphin with a Skylanders game. Setup takes about ten minutes, and you only do it once.
+You need Windows 10 or 11 (64-bit), a Skylanders Portal of Power on USB, and Cemu, RPCS3, Dolphin or shadPS4 with a Skylanders game. Setup takes about ten minutes, and you only do it once.
 
 ### 1. Install usbip-win2
 
@@ -54,6 +54,7 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 
 - **Cemu:** nothing to set. In the Cemu hybrid build, keep the *Hybrid* checkbox off.
 - **Dolphin:** under **Config → Wii → Whitelisted USB Passthrough Devices**, click **Add…** and choose `1430:0150`. Keep Dolphin's own emulated Skylanders portal off.
+- **shadPS4:** keep its USB device setting on **Real** (the default), so the game gets real USB devices and not shadPS4's own emulated portal. Start shadPS4 after PortalSync.
 - **RPCS3:** nothing to set. Just make sure PortalSync is running before the game boots.
 
 ### 5. Play
@@ -86,7 +87,7 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 | ![Settings](docs/settings.png) | ![Test portal](docs/portal_test.png) |
 | **Settings**: hover over or click a **?** for an explanation. | **Test portal**: which slots hold a figure, plus the lights and a test tone. |
 | ![Start a game](docs/games.png) | ![The welcome window](docs/welcome.png) |
-| **Start game**: your Skylanders games from Cemu, RPCS3 and Dolphin. | **Welcome window** on the first start. |
+| **Start game**: your Skylanders games from Cemu, RPCS3, Dolphin and shadPS4. | **Welcome window** on the first start. |
 | ![Dark mode](docs/dark.png) | |
 | **Dark mode**, with the SAVE column: which saves are on the real figure. | |
 
@@ -94,8 +95,8 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 
 ### Portal and emulators
 
-- **Cemu, RPCS3 and Dolphin** see only the virtual portal. `portal_hide.dll` hides the real one, so there's no "too many Portals".
-- **Start game…** lists the Skylanders games each emulator knows (Cemu's game paths, RPCS3's `games.yml`, Dolphin's ISO folders). It starts the one you pick with PortalSync already running, optionally in fullscreen.
+- **Cemu, RPCS3, Dolphin and shadPS4** see only the virtual portal. `portal_hide.dll` hides the real one, so there's no "too many Portals".
+- **Start game…** lists the Skylanders games each emulator knows (Cemu's game paths, RPCS3's `games.yml`, Dolphin's ISO folders, shadPS4's game folders). It starts the one you pick with PortalSync already running, optionally in fullscreen.
 - **Fast recognition:** a figure is ready in about a second. Both halves of a Swapper take about 2.3 s.
 - **Unplugging is safe:** figures stay loaded while the real portal is away, and saves made meanwhile are written when it comes back.
 - **Real and file figures together:** figures from the real portal and `.sky` files share the virtual portal's 16 slots, so you can play your own figures alongside ones you don't have on hand.
@@ -157,8 +158,9 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 | Cemu 2.6 | Skylanders Trap Team, SuperChargers, Swap Force | Traps, vehicles, Swap Force halves, portal speaker, repair. |
 | RPCS3 | Skylanders Giants (BLES01689) | |
 | Dolphin | Skylanders Spyro's Adventure | Needs USB passthrough, see below. |
+| shadPS4 | Skylanders Imaginators (CUSA05158) | Figures read from the real portal and from files, saves written back to the real figure. |
 
-All of them were tested with a Traptanium Portal (USB ID `1430:0150`) on Windows 11.
+Tested with a Traptanium Portal (USB ID `1430:0150`) on Windows 11.
 
 ## Building from source
 
@@ -179,7 +181,7 @@ cl /nologo /O2 /LD portal_hide.c cfgmgr32.lib
 
 - **The virtual portal:** `portalsync.py` is a USB/IP server. usbip-win2 attaches its virtual portal, and Windows sees a second `1430:0150` HID device. The portal protocol (status reports, block reads and writes, lights, audio) is ported from Dolphin's emulated portal.
 - **The real portal:** PortalSync claims it with libusb, reads each figure placed on it, and loads it into a free virtual slot. Game writes go to `dumps\<character> (<id>) - current.sky`, and to the real figure when write-back is on.
-- **Hiding the real portal:** `portal_hide.dll` is loaded into each running Cemu, RPCS3 and Dolphin process. It patches `SetupDiGetDeviceInstanceIdA` so that it fails for a portal behind a real (PCI) USB controller while the virtual portal exists, and libusb then skips the real portal. Nothing is written to the emulator folders, and the patch goes away when the emulator closes.
+- **Hiding the real portal:** `portal_hide.dll` is loaded into each running Cemu, RPCS3, Dolphin and shadPS4 process. It patches `SetupDiGetDeviceInstanceIdA` so that it fails for a portal behind a real (PCI) USB controller while the virtual portal exists, and libusb then skips the real portal. Nothing is written to the emulator folders, and the patch goes away when the emulator closes.
 - **Reading figure saves:** saves are decrypted the way Dolphin does it (AES from Windows itself, no extra package). Checksum types 1–3 cover the main save area, and type 6 covers the second area that holds the later games' experience.
 - **Portal quirks found while testing:** this portal sometimes answers with the previous block's data, sends repeated status reports, and lets audio block control transfers. PortalSync handles all three.
 
