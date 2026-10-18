@@ -1,8 +1,8 @@
-"""PortalSync (formerly Portal Bridge): software Skylanders Portal of Power exported over USB/IP to usbip-win2.
+"""PortalSync: software Skylanders Portal of Power exported over USB/IP to usbip-win2.
 Copyright (C) 2026 rhsts. SPDX-License-Identifier: GPL-2.0-or-later (see LICENSE).
 
-  python portal_bridge.py capture         # real portal plugged in: save its descriptors + back up figures
-  python portal_bridge.py [a.sky ...]     # serve the virtual portal on 127.0.0.1:3240, attach it, open the UI
+  python portalsync.py capture         # real portal plugged in: save its descriptors + back up figures
+  python portalsync.py [a.sky ...]     # serve the virtual portal on 127.0.0.1:3240, attach it, open the UI
 
 Dumps are named after the character and the figure's ID, e.g. dumps/Zook (86bc1263) - current.sky:
   current               the copy the game plays on; game saves land here
@@ -13,18 +13,18 @@ and one backup per figure, the newest; a new one sends the older one to the Recy
   before restore <time> what the figure held just before a restore wrote to it
 Real portal (plugged in): placing a figure backs it up (if it has no backup) and copies it into a
 free virtual slot; lifting it empties that slot. Unplugging the real portal keeps the copies loaded.
-  Cemu:    start the bridge before booting the game; the real portal can stay plugged in. Cemu
-           counts every portal when a game boots ("too many Portals" with real + virtual), so the
-           bridge loads portal_hide.dll into each Cemu it sees, which hides the real portal from
+  Cemu:    start PortalSync before booting the game; the real portal can stay plugged in. Cemu
+           counts every portal when a game boots ("too many Portals" with real + virtual), so
+           PortalSync loads portal_hide.dll into each Cemu it sees, which hides the real portal from
            Cemu while the virtual one is attached (see portal_hide.c). Without the DLL: plug the
            real portal in after the game has started. Figures then follow the real portal live.
-  Dolphin: the bridge loads portal_hide.dll into Dolphin too. Without it, never plug the real portal
+  Dolphin: PortalSync loads portal_hide.dll into Dolphin too. Without it, never plug the real portal
            in while Dolphin runs: Dolphin rescans, counts it ("too many USB Wireless Receivers") and
-           opens it alongside the bridge; pulling it out in that state crashed Windows (bugcheck
+           opens it alongside PortalSync; pulling it out in that state crashed Windows (bugcheck
            0x50). Then place figures first, unplug, and start Dolphin.
-  RPCS3:   start the bridge before booting the game: with no portal at boot RPCS3 adds its own
+  RPCS3:   start PortalSync before booting the game: with no portal at boot RPCS3 adds its own
            emulated one, and the virtual portal would then be a second portal. RPCS3 rescans USB
-           every 4 seconds and hands every 1430:0150 it finds to the game, so the bridge loads
+           every 4 seconds and hands every 1430:0150 it finds to the game, so PortalSync loads
            portal_hide.dll into it too. Without the DLL: same rule as Dolphin.
 Write-back (checkbox, on by default, choice kept in settings.json): game saves to a copied figure are also written to the real
 figure while it sits on the real portal, data blocks only, each verified by reading it back.
@@ -91,7 +91,7 @@ EPIPE, ECONNRESET = 32, 104  # Linux errno values, as USB/IP expects
 ADDED, READY, REMOVING, REMOVED = 3, 1, 2, 0  # Dolphin Skylander status enum
 
 
-LOG_FILE = None  # main() opens bridge.log
+LOG_FILE = None  # main() opens portalsync.log
 LOG_LINES = deque(maxlen=500)  # (number, line) for the window's log pane
 LOG_NUMBERS = itertools.count(1)
 LOG_LOCK = threading.Lock()  # numbers stay in order across threads
@@ -879,7 +879,7 @@ class Server:
 
     def dev_info(self, with_interfaces):
         d, cfg = self.desc.device, self.desc.config
-        info = (f'/portal-bridge/{BUSID}'.encode().ljust(256, b'\0') + BUSID.encode().ljust(32, b'\0')
+        info = (f'/portalsync/{BUSID}'.encode().ljust(256, b'\0') + BUSID.encode().ljust(32, b'\0')
                 + struct.pack('>III', 1, 1, self.desc.speed)
                 + struct.pack('>HHH', *struct.unpack_from('<HHH', d, 8))
                 + bytes([d[4], d[5], d[6], cfg[5], d[17], cfg[4]]))
@@ -1179,12 +1179,12 @@ class Mirror:
         if self.busy not in present:
             self.busy = None
         who = ', '.join(sorted(set(RUNNING_EMULATORS.values())))
-        if self.busy and who:  # the emulator booted its game before the bridge, so the game took the real portal
+        if self.busy and who:  # the emulator booted its game before PortalSync, so the game took the real portal
             state = f'real portal: in use by {who} - see the pop-up ({e})'
             if state != self.state:
-                self.notices.put(f"{who} has the real portal: its game was started before the bridge, so the game "
-                                 "can't see the bridge's portal.\n\n1. Stop the game.\n2. Unplug the real portal and "
-                                 "plug it back in.\n3. Start the game again.\n\nNext time, start the bridge first.")
+                self.notices.put(f"{who} has the real portal: its game was started before PortalSync, so the game "
+                                 "can't see PortalSync's portal.\n\n1. Stop the game.\n2. Unplug the real portal and "
+                                 "plug it back in.\n3. Start the game again.\n\nNext time, start PortalSync first.")
         elif self.busy:
             state = f'real portal: in use by another program - unplug it to free it ({e})'
         elif dev is not None and (dev.bus, dev.address) in present:
@@ -1276,7 +1276,7 @@ class Mirror:
             with open(path, 'rb') as f:
                 previous = f.read()
             if previous != data and self.write_back and self.left.get(uid) == data and not figure_info(previous).damaged:
-                # The figure is exactly as the bridge left it, so the difference is only game saves that did
+                # The figure is exactly as PortalSync left it, so the difference is only game saves that did
                 # not reach it (lifted mid-write, 2026-10-11): finish them like write-back would have.
                 catch_up = data = previous
             elif previous != data:  # progress the real figure does not have: keep it, never overwrite
@@ -1686,7 +1686,7 @@ def inject(pid, dll):
 
 
 def watch_emulators():
-    """Load portal_hide.dll into every emulator in HIDE_FROM running while the bridge runs, before it boots a game."""
+    """Load portal_hide.dll into every emulator in HIDE_FROM running while PortalSync runs, before it boots a game."""
     seen, tries = set(), {}
     while True:
         out = subprocess.run(['tasklist', '/fo', 'csv', '/nh'], capture_output=True, text=True,
@@ -1755,7 +1755,7 @@ def install_update(url, folder=None):
     files = {os.path.basename(n): n for n in z.namelist() if not n.endswith('/')}  # no folders: nothing lands elsewhere
     if 'PortalSync.exe' not in files:
         raise ValueError('the release zip has no PortalSync.exe')
-    for name in ('settings.json', 'bridge.log'):
+    for name in ('settings.json', 'portalsync.log'):
         files.pop(name, None)
     for name, member in files.items():
         with open(os.path.join(folder, name + '.new'), 'wb') as f:
@@ -1901,7 +1901,7 @@ def start_game(exe, emulator, path, fullscreen=False):
                 return
             try:
                 if inject(proc.pid, HIDE_DLL):
-                    return log(f'{os.path.basename(exe)} (pid {proc.pid}): real portal hidden from it (started by the bridge)')
+                    return log(f'{os.path.basename(exe)} (pid {proc.pid}): real portal hidden from it (started by PortalSync)')
             except OSError:
                 pass
             time.sleep(0.05)
@@ -1963,7 +1963,7 @@ class App:
                 DISABLED_BG='#3a3a3a', BOX_EDGE='#9a9a9a', BOX_EDGE_HOVER='#c8c8c8')
     locals().update(LIGHT)  # class defaults; __init__ switches to DARK when chosen
     STATE_COLOURS = (('claimed', '#0f7b0f'), ('not plugged in', '#8a8a8a'), ('', '#c45500'))  # first match wins
-    QUIET = re.compile(r'\S+ (portal [<-]|GET_DESCRIPTOR|SET_CONFIGURATION|UNLINK|portal sound: \d)')  # bridge.log only
+    QUIET = re.compile(r'\S+ (portal [<-]|GET_DESCRIPTOR|SET_CONFIGURATION|UNLINK|portal sound: \d)')  # portalsync.log only
     BAD_LINE = re.compile(r'FAILED|failed|in use|lost|error|not copied|not written|could not|did NOT', re.I)
 
     def __init__(self, server, mirror=None, first_start=False):
@@ -3047,7 +3047,7 @@ class App:
         col = right
         section('Window')
         check('Show log', self.show_log, self.toggle_log, pad=0,
-              help='The activity list at the bottom of the main window. Everything stays in bridge.log either way.')
+              help='The activity list at the bottom of the main window. Everything stays in portalsync.log either way.')
         dark = tk.BooleanVar(value=self.settings().get('dark', False))
         check('Dark mode', dark, lambda: self.remember(dark=dark.get()), help='Used from the next start.')
         updates = tk.BooleanVar(value=self.settings().get('check_updates', True))
@@ -3303,8 +3303,8 @@ class App:
         grid.pack(anchor='w')
         cells = []
         for k in range(8):  # the game uses up to 8 real slots (Swappers and traps take one each)
-            c = tk.Label(grid, width=9, height=3, font=('Segoe UI', 8), background=self.BUTTON, foreground=self.MUTED,
-                         highlightthickness=1, highlightbackground=self.LINE, wraplength=70)
+            c = tk.Label(grid, width=13, height=3, font=('Segoe UI', 8), background=self.BUTTON, foreground=self.MUTED,
+                         highlightthickness=1, highlightbackground=self.LINE, wraplength=76)
             c.grid(row=k // 4, column=k % 4, padx=3, pady=3)
             cells.append(c)
 
@@ -3513,7 +3513,7 @@ class App:
         return emulators
 
     def open_games(self):
-        """Start a Skylanders game from here, so the bridge is always running first."""
+        """Start a Skylanders game from here, so PortalSync is always running first."""
         import tkinter as tk
         from tkinter import ttk
         emulators = self.emulators()
@@ -3603,7 +3603,7 @@ def main():
             if attempt == (29 if updated else 0):
                 raise SystemExit(f'Port {TCP_PORT} is in use. Is PortalSync already running?')
             time.sleep(0.5)
-    LOG_FILE = open(os.path.join(HERE, 'bridge.log'), 'w')
+    LOG_FILE = open(os.path.join(HERE, 'portalsync.log'), 'w')
     global DUMPS, BACKUPS_KEPT
     prefs = App.settings()
     DUMPS = prefs.get('dumps') or DUMPS
@@ -3681,7 +3681,7 @@ if __name__ == '__main__':
         import traceback
         log(traceback.format_exc())
         if not sys.stdout:
-            ctypes.windll.user32.MessageBoxW(None, f'PortalSync stopped:\n{e}\n\nDetails are in bridge.log.',
+            ctypes.windll.user32.MessageBoxW(None, f'PortalSync stopped:\n{e}\n\nDetails are in portalsync.log.',
                                              'PortalSync', 0x10)
         raise
     except SystemExit as e:

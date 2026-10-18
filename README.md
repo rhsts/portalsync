@@ -1,7 +1,5 @@
 # PortalSync
 
-*Formerly Portal Bridge.*
-
 Use one real Skylanders Portal of Power with **Cemu** (Wii U), **RPCS3** (PS3) and **Dolphin** (Wii) on Windows, and keep your game progress on your real figures. Play your real figures and `.sky` figures from your PC at the same time.
 
 PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the real portal is copied into the virtual portal, and the emulator talks only to the virtual one. Game saves go back onto the real figure. The real portal can stay plugged in the whole time: a small DLL hides it from the emulators, so games never say "too many Portals".
@@ -79,14 +77,18 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 
 | | |
 | --- | --- |
-| ![Add a Skylander: your figures with level, gold and villain](docs/add.png) | ![All Skylanders: game, element and the ones you have](docs/collection.png) |
-| **Add Skylander**: your figures, with level, gold and the villain in a trap. | **All Skylanders**: all 548 figures, with game, element and a tick for yours. |
-| ![The restore pop-up](docs/restore.png) | ![Right-click a figure](docs/menu.png) |
-| **Restore**: put newer progress back on a figure, one figure at a time. | **Right-click a figure** to unload, edit, repair, reset or restore it. |
-| ![Settings](docs/settings.png) | ![Start a game](docs/games.png) |
-| **Settings**: hover over or click a **?** for an explanation. | **Start game**: your Skylanders games from Cemu, RPCS3 and Dolphin. |
-| ![The welcome window](docs/welcome.png) | ![Dark mode](docs/dark.png) |
-| **Welcome window** on the first start. | **Dark mode.** |
+| ![Add a Skylander: your figures with level, gold and villain](docs/add.png) | ![All Skylanders, filtered on Trap Team](docs/collection.png) |
+| **Add Skylander**: your figures, with level, gold and the villain in a trap. | **All Skylanders**: 591 figures. Click a game, or use the drop-down, to filter. |
+| ![Teams](docs/teams.png) | ![Right-click a figure](docs/menu.png) |
+| **Teams**: save the figures on the portal and load them back in one click. | **Right-click a figure**: unload, replace, progress history, edit, repair, reset or restore. |
+| ![Progress history](docs/history.png) | ![The restore pop-up](docs/restore.png) |
+| **Progress history**: a figure's level and gold over time. | **Restore**: put newer progress back on a figure, one figure at a time. |
+| ![Settings](docs/settings.png) | ![Test portal](docs/portal_test.png) |
+| **Settings**: hover over or click a **?** for an explanation. | **Test portal**: which slots hold a figure, plus the lights and a test tone. |
+| ![Start a game](docs/games.png) | ![The welcome window](docs/welcome.png) |
+| **Start game**: your Skylanders games from Cemu, RPCS3 and Dolphin. | **Welcome window** on the first start. |
+| ![Dark mode](docs/dark.png) | |
+| **Dark mode**, with the SAVE column: which saves are on the real figure. | |
 
 ## Features
 
@@ -164,7 +166,7 @@ To run it from the source instead of the exe (steps 1, 2 and 4 of Getting starte
 
 ```
 pip install -r requirements.txt
-python portal_bridge.py
+python portalsync.py
 ```
 
 Python 3.13 was used. To build the exe and the DLL together, install PyInstaller as well, then run `powershell -ExecutionPolicy Bypass -File build.ps1`. This needs the Visual Studio C++ x64 build tools. To build only `portal_hide.dll`, use an *x64 Native Tools Command Prompt for VS 2022*:
@@ -175,7 +177,7 @@ cl /nologo /O2 /LD portal_hide.c cfgmgr32.lib
 
 ## How it works
 
-- **The virtual portal:** `portal_bridge.py` is a USB/IP server. usbip-win2 attaches its virtual portal, and Windows sees a second `1430:0150` HID device. The portal protocol (status reports, block reads and writes, lights, audio) is ported from Dolphin's emulated portal.
+- **The virtual portal:** `portalsync.py` is a USB/IP server. usbip-win2 attaches its virtual portal, and Windows sees a second `1430:0150` HID device. The portal protocol (status reports, block reads and writes, lights, audio) is ported from Dolphin's emulated portal.
 - **The real portal:** PortalSync claims it with libusb, reads each figure placed on it, and loads it into a free virtual slot. Game writes go to `dumps\<character> (<id>) - current.sky`, and to the real figure when write-back is on.
 - **Hiding the real portal:** `portal_hide.dll` is loaded into each running Cemu, RPCS3 and Dolphin process. It patches `SetupDiGetDeviceInstanceIdA` so that it fails for a portal behind a real (PCI) USB controller while the virtual portal exists, and libusb then skips the real portal. Nothing is written to the emulator folders, and the patch goes away when the emulator closes.
 - **Reading figure saves:** saves are decrypted the way Dolphin does it (AES from Windows itself, no extra package). Checksum types 1–3 cover the main save area, and type 6 covers the second area that holds the later games' experience.
@@ -184,7 +186,7 @@ cl /nologo /O2 /LD portal_hide.c cfgmgr32.lib
 ## Tests
 
 ```
-python test_portal_bridge.py
+python test_portalsync.py
 python -m unittest -v test_save_safety
 ```
 
@@ -194,16 +196,16 @@ The first prints `ok`, and the second runs 16 save-safety tests. The tests use f
 
 | File | What it is |
 | --- | --- |
-| `portal_bridge.py` | The program: USB/IP server, portal logic, window. |
+| `portalsync.py` | The program: USB/IP server, portal logic, window. |
 | `portal_hide.c` | Source of `portal_hide.dll`. |
-| `portal_descriptors.json` | USB descriptors of a real portal, which the virtual portal copies. Recreate them from your own portal with `python portal_bridge.py capture`. |
+| `portal_descriptors.json` | USB descriptors of a real portal, which the virtual portal copies. Recreate them from your own portal with `python portalsync.py capture`. |
 | `figure_names.json` | Figure IDs and names: Dolphin's Skylander list, the Imaginators Senseis from Cemu's and RPCS3's lists, and the Imaginators variants and Creation Crystals from [Skylander-IDs](https://github.com/Texthead1/Skylander-IDs). |
 | `figure_details.json` | Game and element of each figure in the All Skylanders list. |
-| `test_portal_bridge.py`, `test_save_safety.py` | Tests. |
+| `test_portalsync.py`, `test_save_safety.py` | Tests. |
 | `build.ps1` | Builds `PortalSync.exe` and `portal_hide.dll`. |
 | `portal.ico` | Icon. |
 
-Your figures, the log and your settings stay on your PC (`dumps\`, `bridge.log`, `settings.json`). They're never part of the repository.
+Your figures, the log and your settings stay on your PC (`dumps\`, `portalsync.log`, `settings.json`). They're never part of the repository.
 
 ## Credits
 

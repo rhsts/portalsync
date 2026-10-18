@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import portal_bridge as pb
-from test_portal_bridge import DESC, FakeReal, saved_figure
+import portalsync as pb
+from test_portalsync import DESC, FakeReal, saved_figure
 
 
 class SaveSafetyTests(unittest.TestCase):

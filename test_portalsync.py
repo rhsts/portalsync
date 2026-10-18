@@ -1,4 +1,4 @@
-"""Loopback check: a fake USB/IP client talks to Server/Portal. Run: python test_portal_bridge.py"""
+"""Loopback check: a fake USB/IP client talks to Server/Portal. Run: python test_portalsync.py"""
 import socket
 import struct
 import threading
@@ -12,8 +12,8 @@ import subprocess
 import sys
 import tempfile
 
-import portal_bridge as pb
-from portal_bridge import Portal, Server, recv_exact
+import portalsync as pb
+from portalsync import Portal, Server, recv_exact
 
 DEVICE = bytes.fromhex('120100020000004030145001000101020001')
 CONFIG = bytes.fromhex('0902290001010080fa' '090400000203000000' '092111010001221d00' '0705810340000107050203400001')
@@ -357,7 +357,7 @@ def creating():
 
 
 def game_first():
-    """Busy real portal while an emulator runs: its game booted before the bridge. Say what to do."""
+    """Busy real portal while an emulator runs: its game booted before PortalSync. Say what to do."""
     m = pb.Mirror(Server(Portal(DESC.r_reply), DESC), vhci_bus=3)
     portal = SimpleNamespace(bus=1, address=21)
     real_devices, pb.portal_devices = pb.portal_devices, lambda: [portal]
@@ -433,7 +433,7 @@ sys.exit(0 if k.GetModuleHandleW('portal_hide.dll') else 1)
 
 
 def injection():
-    """inject() gets portal_hide.dll into another process, the way the bridge does it to Cemu."""
+    """inject() gets portal_hide.dll into another process, the way PortalSync does it to Cemu."""
     if not os.path.exists(pb.HIDE_DLL):
         return print('portal_hide.dll not built: injection not checked')
     child = subprocess.Popen([sys.executable, '-I', '-c', CHILD], stdout=subprocess.PIPE, text=True)

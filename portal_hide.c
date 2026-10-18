@@ -1,4 +1,4 @@
-/* portal_hide.dll: portal-bridge loads this into Cemu, RPCS3 and Dolphin so their libusb never lists
+/* portal_hide.dll: PortalSync loads this into Cemu, RPCS3 and Dolphin so their libusb never lists
 the real portal.
 Copyright (C) 2026 rhsts. SPDX-License-Identifier: GPL-2.0-or-later (see LICENSE).
 
@@ -7,7 +7,7 @@ Portals". RPCS3 and Dolphin rescan while a game runs and pass each one to the ga
 "could not read the device instance ID ... skipping"), so this replaces SetupDiGetDeviceInstanceIdA
 in the Cemu process with a version that fails for a real portal (one behind a PCI host controller)
 while a virtual portal (usbip-win2's vhci is not PCI) is present. Without a virtual portal nothing
-is hidden, so stopping the bridge gives Cemu the real portal back at the next game boot.
+is hidden, so stopping PortalSync gives Cemu the real portal back at the next game boot.
 
 Build (x64 Native Tools Command Prompt for VS 2022, in this folder):
   cl /nologo /O2 /LD portal_hide.c cfgmgr32.lib
@@ -74,7 +74,7 @@ BOOL WINAPI DllMain(HINSTANCE dll, DWORD reason, LPVOID reserved)
     if (reason == DLL_PROCESS_ATTACH) {
         /* mov rax, get_instance_id; jmp rax. Never undone: the DLL stays loaded until the emulator exits.
            ponytail: the 12-byte write is not atomic; a thread inside the function's first bytes right
-           now could crash. The bridge injects before a game boots, when nothing enumerates USB; if it
+           now could crash. PortalSync injects before a game boots, when nothing enumerates USB; if it
            ever matters, suspend the other threads around the write. */
         unsigned char jump[12] = {0x48, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xE0};
         HMODULE setupapi = GetModuleHandleA("setupapi.dll");  /* Cemu imports it; no LoadLibrary under the loader lock */
