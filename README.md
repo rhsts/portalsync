@@ -2,7 +2,7 @@
 
 *Formerly Portal Bridge.*
 
-Use one real Skylanders Portal of Power with **Cemu** (Wii U), **RPCS3** (PS3) and **Dolphin** (Wii) on Windows, and keep your game progress on your real figures.
+Use one real Skylanders Portal of Power with **Cemu** (Wii U), **RPCS3** (PS3) and **Dolphin** (Wii) on Windows, and keep your game progress on your real figures. Play your real figures and `.sky` figures from your PC at the same time.
 
 PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the real portal is copied into the virtual portal, and the emulator talks only to the virtual one. Game saves go back onto the real figure. The real portal can stay plugged in the whole time: a small DLL hides it from the emulators, so games never say "too many Portals".
 
@@ -10,6 +10,7 @@ PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the
 
 ## Highlights
 
+- **Real and virtual figures together:** play figures from the real portal and `.sky` figures from your PC at the same time, up to 16.
 - **One portal for three emulators:** Cemu, RPCS3 and Dolphin, with the real portal plugged in.
 - **Your progress stays on your figures:** game saves are written back to the real figure, and every block is checked.
 - **Backups of every figure**, with a pop-up to put newer progress back when a figure is behind its copy.
