@@ -350,7 +350,10 @@ def figure_info(data):
         info.villains = [VILLAINS.get(d[a + 0x10 + k * 0x40], f'villain {d[a + 0x10 + k * 0x40]}')
                          for k in range(min(d[a + 1], 6))]
         return info
-    if 200 <= fid < 400 or 3200 <= fid < 3400 or fid >= 3500:  # items, traps, vehicles, trophies (Dolphin's types)
+    # items, traps, vehicles, trophies (Dolphin's types), and Imaginators Creation Crystals: a crystal passes checksum
+    # types 1 and 2, but its third and second-area blocks use another layout (the user's two, 2026-10-18), so
+    # reading it like a Skylander called it damaged and found a garbage nickname
+    if 200 <= fid < 400 or 3200 <= fid < 3400 or fid >= 3500 or 680 <= fid < 700:
         return info
     if not any(data[0x80:0x90]) and not any(data[0x240:0x250]):
         info.kind = 'new'
@@ -1946,6 +1949,29 @@ def start_game(exe, emulator, path, fullscreen=False):
     return proc
 
 
+def monitor_area(x, y):
+    """Work area (left, top, right, bottom) of the monitor at screen point x, y, or the nearest one. Tk only knows
+    the main screen, so windows were pushed onto it from a second monitor (the right-click menu, 2026-10-18)."""
+    from ctypes import wintypes as w
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [('cbSize', w.DWORD), ('rcMonitor', w.RECT), ('rcWork', w.RECT), ('dwFlags', w.DWORD)]
+    u = ctypes.windll.user32
+    u.MonitorFromPoint.restype, u.MonitorFromPoint.argtypes = ctypes.c_void_p, (w.POINT, w.DWORD)
+    u.GetMonitorInfoW.argtypes = (ctypes.c_void_p, ctypes.POINTER(MONITORINFO))
+    info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+    u.GetMonitorInfoW(u.MonitorFromPoint(w.POINT(int(x), int(y)), 2), ctypes.byref(info))  # 2: the nearest monitor
+    r = info.rcWork
+    return r.left, r.top, r.right, r.bottom
+
+
+def place_on(x, y, w, h, near):
+    """x, y moved just enough that a w x h window fits the work area of the monitor that `near` (a widget) is on."""
+    left, top, right, bottom = monitor_area(near.winfo_rootx() + near.winfo_width() // 2,
+                                            near.winfo_rooty() + near.winfo_height() // 2)
+    return max(left, min(x, right - w)), max(top, min(y, bottom - h))
+
+
 def dark_title(window):
     """Windows 10/11 dark title bar for a Tk window (DWMWA_USE_IMMERSIVE_DARK_MODE)."""
     try:
@@ -2541,7 +2567,13 @@ class App:
 
     def ask_load(self):
         from tkinter import filedialog
-        for p in filedialog.askopenfilenames(initialdir=DUMPS, filetypes=[('Skylander dumps', '*.sky'), ('All files', '*.*')]):
+        paths = filedialog.askopenfilenames(initialdir=DUMPS, filetypes=[('Skylander dumps', '*.sky'), ('All files', '*.*')])
+        if paths and self.replace is not None:  # opened from "Replace with…": the figure being replaced goes first
+            with self.server.cv:
+                if self.portal.slots[self.replace].path:
+                    self.portal.remove(self.replace)
+        self.replace = None
+        for p in paths:
             self.load(p)
 
     def open_picker(self, replace=None):
@@ -2668,11 +2700,13 @@ class App:
         p.bind('<Return>', lambda e: self.pick(self.DEFAULT_PICK[self.tab.get()]))
         p.bind('<Escape>', lambda e: p.destroy())
         self.switch_tab()
-        sw, sh = p.winfo_screenwidth(), p.winfo_screenheight()
-        w, h = min(max(780, p.winfo_reqwidth()), sw - 40), 600  # wide enough for the fitted columns
+        left, top, right, bottom = monitor_area(self.root.winfo_rootx() + self.root.winfo_width() // 2,
+                                                self.root.winfo_rooty() + self.root.winfo_height() // 2)
+        w, h = min(max(780, p.winfo_reqwidth()), right - left - 40), 600  # wide enough for the fitted columns
         x = self.root.winfo_rootx() + (self.root.winfo_width() - w) // 2  # centred over the main window,
         y = self.root.winfo_rooty() + max(0, (self.root.winfo_height() - h) // 3)
-        p.geometry(f'{w}x{h}+{min(max(0, x), sw - w)}+{min(max(0, y), sh - h)}')  # but on the screen
+        x, y = place_on(x, y, w, h, self.root)  # but on its monitor
+        p.geometry(f'{w}x{h}+{x}+{y}')
         search.focus_set()
 
     def fit_columns(self, tree, rows, window, extra):
@@ -2686,9 +2720,11 @@ class App:
             tree.column(col, width=w, minwidth=w)
             total += w
         window.update_idletasks()
-        need = min(total + extra, window.winfo_screenwidth() - 40)
+        left, top, right, bottom = monitor_area(window.winfo_rootx() + window.winfo_width() // 2,
+                                                window.winfo_rooty() + window.winfo_height() // 2)
+        need = min(total + extra, right - left - 40)
         if window.winfo_width() < need:
-            x = max(0, min(window.winfo_x() - (need - window.winfo_width()) // 2, window.winfo_screenwidth() - need))
+            x = max(left, min(window.winfo_x() - (need - window.winfo_width()) // 2, right - need))
             height = max(window.winfo_height(), window.winfo_reqheight())  # never shorter than its contents
             window.geometry(f'{need}x{height}+{x}+{window.winfo_y()}')
 
@@ -2924,8 +2960,9 @@ class App:
                 w.bind('<Leave>', lambda e, w=w: w.configure(background=self.CARD))
                 w.bind('<ButtonRelease-1>', lambda e, c=command: choose(c))
         m.update_idletasks()
-        x = min(x, m.winfo_screenwidth() - m.winfo_reqwidth())
-        y = y if y + m.winfo_reqheight() <= m.winfo_screenheight() else y - m.winfo_reqheight()
+        left, top, right, bottom = monitor_area(x, y)  # the monitor clicked on
+        x = max(left, min(x, right - m.winfo_reqwidth()))
+        y = y if y + m.winfo_reqheight() <= bottom else max(top, y - m.winfo_reqheight())
         m.geometry(f'+{x}+{y}')
         m.bind('<Escape>', close)
         m.bind('<FocusOut>', close)  # clicked another program
@@ -3111,8 +3148,7 @@ class App:
         d.update_idletasks()
         x = self.root.winfo_rootx() + (self.root.winfo_width() - d.winfo_reqwidth()) // 2  # over the main window,
         y = self.root.winfo_rooty() + 60
-        d.geometry(f'+{min(max(0, x), d.winfo_screenwidth() - d.winfo_reqwidth())}'  # but on the screen
-                   f'+{min(max(0, y), d.winfo_screenheight() - d.winfo_reqheight() - 40)}')
+        d.geometry('+%d+%d' % place_on(x, y, d.winfo_reqwidth(), d.winfo_reqheight(), self.root))  # on its monitor
 
     def help_icon(self, parent, text):
         """A small ? that shows `text` (or text() when it is a function) after a moment's hover, or on a click."""
@@ -3130,7 +3166,7 @@ class App:
             tk.Label(w, text=text() if callable(text) else text, background=self.CARD, foreground=self.TEXT,
                      font=('Segoe UI', 9), wraplength=320, justify='left', padx=10, pady=7).pack(padx=1, pady=1)
             w.update_idletasks()
-            x = min(c.winfo_rootx() + 24, w.winfo_screenwidth() - w.winfo_reqwidth() - 8)
+            x = min(c.winfo_rootx() + 24, monitor_area(c.winfo_rootx(), c.winfo_rooty())[2] - w.winfo_reqwidth() - 8)
             w.geometry(f'+{x}+{c.winfo_rooty() - 6}')
 
         def hide(*_):
@@ -3546,7 +3582,7 @@ class App:
             self.remember(emulators=emulators, looked_for=list(EMULATOR_EXES))
         if not emulators:
             if hasattr(self, 'status'):  # not yet there on the first start (welcome window)
-                self.say('Looking for Cemu, RPCS3 and Dolphin…')
+                self.say('Looking for your emulators…')
                 self.root.update()
             emulators = find_emulators()
             self.remember(emulators=emulators, looked_for=list(EMULATOR_EXES))

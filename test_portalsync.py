@@ -673,6 +673,10 @@ def extras():
     assert pb.partner('2015:8192') == '1015:8192' and pb.partner('1015:8192') == '2015:8192' and pb.partner('25:0') is None
     assert pb.NAMES['613:20480'] == 'Golden Queen' and pb.NAMES['682:20999'] == 'Air Creation Crystal (Lantern)'
     assert pb.DETAILS['689:22038'] == ['Imaginators', 'Light'] and '613:0' not in pb.DETAILS  # Cemu's variant: name only
+    crystal = bytearray(saved_figure('1dc2de67'))  # a played Creation Crystal: never read as a (damaged) Skylander
+    crystal[0x10:0x12], crystal[0x1C:0x1E] = (682).to_bytes(2, 'little'), (20994).to_bytes(2, 'little')
+    info = pb.figure_info(bytes(crystal))
+    assert info.kind == 'other' and not info.damaged and not info.nickname
     with tempfile.TemporaryDirectory() as d:
         pb.DUMPS = d
         trash = fake_bin(d)
