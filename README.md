@@ -10,14 +10,14 @@ PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the
 
 ## Highlights
 
-- **Real and virtual figures together:** play figures from the real portal and `.sky` figures from your PC at the same time, up to 16.
+- **Real and virtual figures together:** play figures from the real portal and `.sky` figures from your PC at the same time, up to 16. Save **teams** of figures and load them in one click.
 - **One portal for three emulators:** Cemu, RPCS3 and Dolphin, with the real portal plugged in.
 - **Your progress stays on your figures:** game saves are written back to the real figure, and every block is checked.
-- **Backups of every figure**, with a pop-up to put newer progress back when a figure is behind its copy.
-- **See inside your figures:** level, gold, nickname, and the villain inside a Trap Team trap.
+- **Backups of every figure**, a daily backup zip, and a pop-up to put newer progress back when a figure is behind its copy. A **SAVE** column shows whether each save has reached the figure.
+- **See inside your figures:** level, gold, nickname, the villain inside a Trap Team trap, and each Skylander's **progress history**.
 - **Repair a damaged figure.** That's the one the game rejects with "A toy on the portal has a problem". You can also edit gold, nickname and level, or reset a figure to new.
 - **Trap Team sound** on the Traptanium Portal's own speaker, and the **portal lights** follow the game.
-- **Start your games from PortalSync**, a **Settings** page, a **welcome window** and **dark mode**.
+- **Start your games from PortalSync**, a **Settings** page, a **welcome window**, **dark mode**, and **updates in one click**.
 
 New here? Follow [Getting started](#getting-started): usbip-win2, Zadig, PortalSync, done.
 
@@ -96,16 +96,20 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 - **Start game…** lists the Skylanders games each emulator knows (Cemu's game paths, RPCS3's `games.yml`, Dolphin's ISO folders). It starts the one you pick with PortalSync already running, optionally in fullscreen.
 - **Fast recognition:** a figure is ready in about a second. Both halves of a Swapper take about 2.3 s.
 - **Unplugging is safe:** figures stay loaded while the real portal is away, and saves made meanwhile are written when it comes back.
+- **Real and file figures together:** figures from the real portal and `.sky` files share the virtual portal's 16 slots, so you can play your own figures alongside ones you don't have on hand.
 - **Pop-ups over fullscreen games:** a warning or a restore question takes the focus in front of the game, then gives it back.
 
 ### Figures
 
 - **Add Skylander** (no file explorer needed):
   - **Your Skylanders:** every figure you've played, with level, gold, nickname, the villain in a trap, when it was last played, and its backup. Load its current copy or its backup.
-  - **All Skylanders:** all 548 figures, the 31 Imaginators Senseis included, with game, element and a tick for the ones you have, plus a count per game. **Create new figure** makes a blank one, fresh out of the box, like Dolphin and RPCS3 do.
-  - **Search** by name, ID, game or element.
+  - **All Skylanders:** 591 figures, the Imaginators Senseis and the Creation Crystals included, with game, element and a tick for the ones you have, plus a count per game. **Create new figure** makes a blank one, fresh out of the box, like Dolphin and RPCS3 do.
+  - **Teams:** **Save portal as team…** keeps the figures now on the virtual portal under a name. **Load team** puts them all back at once.
+  - **Swapper halves come together:** loading or creating one half of a Swap Force Swapper also brings its other half, unless a half of that kind is on the portal already.
+  - **Search** by name, ID, game or element, and **filter by game** (Spyro's Adventure to Imaginators): pick one in the drop-down, or click a game in the "You have … of …" line. Click it again for all games.
   - **Browse files…** for any other `.sky` file, or **drag and drop** `.sky` files onto the window.
 - **Details** in the main window: level and gold, or "holds Bad Juju" for a trap.
+- **Imaginators:** real Senseis and Creation Crystals are named and work as usual. A *created* Imaginators figure needs a patch, because the game checks a signature that only factory-made figures have: in Cemu, turn on the *Signature Patch* graphic pack (Skylanders Imaginators → Mods). RPCS3 has no such patch yet.
 - **Trap Team traps:** PortalSync shows which villain is inside, and which villains it held before. The 46 villain IDs come from the game's own files.
 
 ### Saves and backups
@@ -113,12 +117,15 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 - **Write saves to real figures** (on by default). Only data blocks are written, and every block is read back to check it.
   - **Retries:** a save that fails is tried up to three times, and a newer save replaces an older retry. The status line shows retries and failures.
   - **Nothing invalid reaches the figure:** invalid or incomplete writes from the game are refused first.
+- **SAVE column** in the main window: "✓ on figure", "saving 2 blocks", "FAILED", or "on PC" for a figure loaded from a file.
 - **Backups** in the `dumps` folder, named after the character, for example `Zook (86bc1263) - original.sky`.
   - Keep 1 to 10 per figure. Older ones go to the Recycle Bin, never straight to deletion.
   - An empty, cut-off or damaged copy never replaces an intact backup.
+  - **Daily backup zip:** once a day, every figure file goes into `dumps\daily backups\Skylanders <date>.zip`. The last 7 are kept.
+- **Progress history:** PortalSync notes a Skylander's level and gold each time they change (`dumps\progress.csv`). Right-click a figure → **Progress history…** shows them as a list and a chart, together with its backups.
 - **Restore progress:** when a figure you place is behind its saved copy, a pop-up offers to write that progress onto the figure. What the figure held is kept as its backup, so a restore can be undone.
 - **Damaged saves:** when a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". PortalSync warns you as soon as such a figure is placed and offers a **repair** that keeps all its progress.
-- **Right-click a figure** on the real portal for these actions. Each one writes like a restore: backup first, then every block checked.
+- **Right-click a figure:** **Unload**, **Replace with…** (a figure from a file swaps for another one in the same window), and **Progress history…**. For a figure on the real portal also these, each written like a restore: backup first, then every block checked.
   - **Edit gold, nickname, level…**: up to level 20, saved the way the game saves, with the previous save kept as its fallback.
   - **Repair damaged save…**
   - **Reset to a new figure…**: like a toy fresh out of the box.
@@ -129,16 +136,17 @@ To undo it later: in **Device Manager**, open **libusbK USB Devices**, right-cli
 
 - **Trap Team sound** on the Traptanium Portal's speaker, on the PC speakers, or off, with a volume slider.
 - **Portal lights** follow the game, or stay off.
+- **Test portal…** (Settings): which real slots hold a figure, plus buttons that try the lights and play a test tone.
 
 ### Settings
 
 - **Settings…** page. All choices are remembered, and a **?** next to an option explains it.
-  - **Saving:** write saves to figures, the restore pop-up, backups per figure, and the figures folder (for example on OneDrive; your files move there on the next start).
-  - **Sound and lights.**
+  - **Saving:** write saves to figures, the restore pop-up, the daily backup zip, backups per figure, and the figures folder (for example on OneDrive; your files move there on the next start).
+  - **Sound and lights**, and **Test portal…**.
   - **Emulators:** a path box with **Browse…** for each one, and fullscreen start.
   - **Window:** show log, dark mode, and the update check.
 - **Welcome window** on the first start, with the main choices. Dark mode chosen there is used straight away.
-- **Update check:** a link in the window when a newer release is out.
+- **Updates:** when a newer release is out, a link appears in the window. Click it and PortalSync downloads the release from this repository, puts the new files in place and restarts. Your figures and settings stay as they are.
 
 ## Tested
 
@@ -189,8 +197,8 @@ The first prints `ok`, and the second runs 16 save-safety tests. The tests use f
 | `portal_bridge.py` | The program: USB/IP server, portal logic, window. |
 | `portal_hide.c` | Source of `portal_hide.dll`. |
 | `portal_descriptors.json` | USB descriptors of a real portal, which the virtual portal copies. Recreate them from your own portal with `python portal_bridge.py capture`. |
-| `figure_names.json` | Figure IDs and names (548): Dolphin's Skylander list plus the 31 Imaginators Senseis from Cemu's and RPCS3's lists. Creation Crystals are missing, because neither emulator lists them. |
-| `figure_details.json` | Game and element of each figure, from Dolphin's list. |
+| `figure_names.json` | Figure IDs and names: Dolphin's Skylander list, the Imaginators Senseis from Cemu's and RPCS3's lists, and the Imaginators variants and Creation Crystals from [Skylander-IDs](https://github.com/Texthead1/Skylander-IDs). |
+| `figure_details.json` | Game and element of each figure in the All Skylanders list. |
 | `test_portal_bridge.py`, `test_save_safety.py` | Tests. |
 | `build.ps1` | Builds `PortalSync.exe` and `portal_hide.dll`. |
 | `portal.ico` | Icon. |
@@ -201,6 +209,7 @@ Your figures, the log and your settings stay on your PC (`dumps\`, `bridge.log`,
 
 - The portal protocol and the figure list come from [Dolphin](https://github.com/dolphin-emu/dolphin) (`Source/Core/Core/IOS/USB/Emulated/Skylanders/`), cross-checked with [RPCS3](https://github.com/RPCS3/rpcs3) and [Cemu](https://github.com/cemu-project/Cemu).
 - [usbip-win2](https://github.com/vadimgrn/usbip-win2) provides the virtual USB controller.
+- The Imaginators variant IDs and the Creation Crystal IDs come from [Skylander-IDs](https://github.com/Texthead1/Skylander-IDs).
 
 ## License
 

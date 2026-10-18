@@ -658,8 +658,70 @@ def settings_logic():
                                       ['--no-gui', '--fullscreen', r'F:\game'], ['-g', r'F:\game']]
 
 
+def extras():
+    """1.5.0: Swapper halves, Imaginators names, daily zips, progress history, the update installer."""
+    import io, zipfile
+    assert pb.figure_key(figure('00000001', 2015)[:0x1C] + (8192).to_bytes(2, 'little')) == '2015:8192'
+    assert pb.partner('2015:8192') == '1015:8192' and pb.partner('1015:8192') == '2015:8192' and pb.partner('25:0') is None
+    assert pb.NAMES['613:20480'] == 'Golden Queen' and pb.NAMES['682:20999'] == 'Air Creation Crystal (Lantern)'
+    assert pb.DETAILS['689:22038'] == ['Imaginators', 'Light'] and '613:0' not in pb.DETAILS  # Cemu's variant: name only
+    with tempfile.TemporaryDirectory() as d:
+        pb.DUMPS = d
+        trash = fake_bin(d)
+        queen = bytearray(figure('3aae28ee', 613))
+        queen[0x1C:0x1E] = (20480).to_bytes(2, 'little')
+        open(os.path.join(d, 'Golden Queen (variant 0x5000) (3aae28ee) - current.sky'), 'wb').write(queen)
+        pb.rename_old_dumps()
+        assert sorted(os.listdir(d)) == ['Golden Queen (3aae28ee) - current.sky', 'bin']
+
+        os.makedirs(os.path.join(d, 'daily backups'))
+        for day in ('2026-10-01', '2026-10-02', '2026-10-03'):  # older daily zips beyond `keep` are recycled
+            open(os.path.join(d, 'daily backups', f'Skylanders {day}.zip'), 'wb').close()
+        made = pb.daily_zip(keep=2)
+        assert made and zipfile.ZipFile(made).namelist() == ['Golden Queen (3aae28ee) - current.sky']
+        assert sorted(os.listdir(os.path.join(d, 'daily backups'))) == ['Skylanders 2026-10-03.zip', os.path.basename(made)]
+        assert sorted(os.listdir(trash)) == ['Skylanders 2026-10-01.zip', 'Skylanders 2026-10-02.zip']
+        assert pb.daily_zip(keep=2) is None  # once a day
+
+        pb.PROGRESS_LAST.clear()
+        zook = saved_figure('86bc1263', (33000, 10203), gold=100)
+        for gold, when in ((100, 1.8e9), (100, 1.8e9 + 60), (250, 1.8e9 + 120)):  # the same level and gold twice: one line
+            z = saved_figure('86bc1263', (33000, 10203), gold=gold)
+            pb.record_progress(z, pb.figure_info(z), when)
+        open(os.path.join(d, 'Zook (86bc1263) - saved 2026-10-01 10.00.00.sky'), 'wb').write(
+            saved_figure('86bc1263', (24800, 0), gold=50))
+        assert [r[1:] for r in pb.progress_history('86bc1263')] == [(9, 50), (11, 100), (11, 250)]
+        assert pb.progress_history('86bc1263')[0][0] == '2026-10-01 10:00'
+        pb.record_progress(zook, pb.figure_info(zook))  # back to 100 gold: a new line
+        assert len(pb.progress_rows()) == 3
+
+        z = io.BytesIO()  # the update installer: new files in place, old ones as .old, settings untouched
+        with zipfile.ZipFile(z, 'w') as zf:
+            for name, body in (('PortalSync.exe', b'new exe'), ('portal_hide.dll', b'new dll'), ('settings.json', b'{}')):
+                zf.writestr(name, body)
+        app = os.path.join(d, 'app')
+        os.makedirs(app)
+        for name in ('PortalSync.exe', 'settings.json'):
+            open(os.path.join(app, name), 'wb').write(b'old')
+        import urllib.request
+        saved, urllib.request.urlopen = urllib.request.urlopen, lambda req, timeout: io.BytesIO(z.getvalue())
+        try:
+            try:
+                pb.install_update('https://example.com/PortalSync-v9.zip', app)
+                raise AssertionError('accepted a zip from elsewhere')
+            except ValueError:
+                pass
+            assert pb.install_update(pb.DOWNLOADS + 'v9.0.0/PortalSync-v9.0.0.zip', app) == ['PortalSync.exe', 'portal_hide.dll']
+        finally:
+            urllib.request.urlopen = saved
+        files = {n: open(os.path.join(app, n), 'rb').read() for n in os.listdir(app)}
+        assert files == {'PortalSync.exe': b'new exe', 'PortalSync.exe.old': b'old', 'portal_hide.dll': b'new dll',
+                         'settings.json': b'old'}, files
+
+
 def main():
     reading(pb.figure_info)
+    extras()
     pb.figure_info = lambda data: SimpleNamespace(kind='other', level=None, gold=None, nickname='', damaged=False,
                                                   old_damaged=False)  # the other tests' saves are made-up bytes
     names()
