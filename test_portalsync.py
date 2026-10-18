@@ -730,6 +730,14 @@ def extras():
             except ValueError:
                 pass
             assert pb.install_update(pb.DOWNLOADS + 'v9.0.0/PortalSync-v9.0.0.zip', app) == ['PortalSync.exe', 'portal_hide.dll']
+            pics = io.BytesIO()  # Get pictures: only '<id>_<variant>.png' names, and never outside the folder
+            with zipfile.ZipFile(pics, 'w') as zf:
+                for name in ('thumbnails/25_0.png', '../../evil_1.png', 'thumbnails/ATTRIBUTION.md', 'x.exe', '613_20480.png'):
+                    zf.writestr(name, b'png')
+            urllib.request.urlopen = lambda req, timeout: io.BytesIO(pics.getvalue())
+            shelf = os.path.join(d, 'pictures')
+            assert pb.download_pictures('https://example.com/t.zip', shelf) == 2
+            assert sorted(os.listdir(shelf)) == ['25_0.png', '613_20480.png'] and not os.path.exists(os.path.join(d, 'evil_1.png'))
         finally:
             urllib.request.urlopen = saved
         files = {n: open(os.path.join(app, n), 'rb').read() for n in os.listdir(app)}

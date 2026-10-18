@@ -81,7 +81,7 @@ THUMBS = os.path.join(HERE, 'thumbnails')  # optional pictures for Add Skylander
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
 USBIP_EXE = r'C:\Program Files\USBip\usbip.exe'
-VERSION = '1.6.0'  # compared with the latest GitHub release at start (latest_release)
+VERSION = '1.6.1'  # compared with the latest GitHub release at start (latest_release)
 RELEASES = 'https://api.github.com/repos/rhsts/portalsync/releases/latest'
 HIDE_DLL = os.path.join(HERE, 'portal_hide.dll')
 HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe', 'shadps4.exe'}  # emulators that get portal_hide.dll
@@ -1761,6 +1761,29 @@ def latest_release():
 
 
 DOWNLOADS = 'https://github.com/rhsts/portalsync/releases/download/'  # the only place updates come from
+PICTURES = 'https://github.com/rhsts/portalsync-pictures/releases/latest/download/thumbnails.zip'  # Get pictures
+
+
+def download_pictures(url=PICTURES, folder=None):
+    """Fetch the figure pictures zip and put its '<id>_<variant>.png' files into the thumbnails folder (names only:
+    nothing lands elsewhere; anything else in the zip is skipped). Returns how many pictures were saved."""
+    import io, urllib.request, zipfile
+    folder = folder or THUMBS
+    req = urllib.request.Request(url, headers={'User-Agent': f'PortalSync/{VERSION}'})
+    with urllib.request.urlopen(req, timeout=120) as r:
+        data = r.read(100 * 1024 * 1024 + 1)
+    if len(data) > 100 * 1024 * 1024:
+        raise ValueError('the pictures download is larger than 100 MB')
+    z = zipfile.ZipFile(io.BytesIO(data))
+    os.makedirs(folder, exist_ok=True)
+    saved = 0
+    for member in z.namelist():
+        name = os.path.basename(member)
+        if re.fullmatch(r'\d+_\d+\.png', name):
+            with open(os.path.join(folder, name), 'wb') as f:
+                f.write(z.read(member))
+            saved += 1
+    return saved
 
 
 def install_update(url, folder=None):
@@ -2831,11 +2854,13 @@ class App:
             box.bind('<<ComboboxSelected>>', lambda e: (e.widget.selection_clear(), self.fill_picker()))
         self.sort = {}  # tab -> (column, descending): a click on a column heading
         self.view = tk.StringVar(value=self.settings().get('picker_view', 'table') if os.path.isdir(THUMBS) else 'table')
-        if os.path.isdir(THUMBS):  # pictures only when the user added a thumbnails folder
+        if os.path.isdir(THUMBS):  # pictures only when there is a thumbnails folder (Get pictures, or the user's own)
             for value, text in (('pictures', 'Pictures'), ('table', 'Table')):
                 ttk.Radiobutton(self.filters, text=text, value=value, variable=self.view, style='Tab.TRadiobutton',
                                 command=lambda: (self.remember(picker_view=self.view.get()), self.fill_picker())
                                 ).pack(side='right', pady=(8, 0), padx=(0, 4))
+        else:
+            ttk.Button(self.filters, text='Get pictures…', command=self.get_pictures).pack(side='right', pady=(8, 0))
         # All Skylanders: what you have per game; a click on a game filters on it (Text: it wraps, and tags take clicks)
         self.summary = tk.Text(body, height=1, wrap='word', relief='flat', borderwidth=0, highlightthickness=0,
                                background=self.CARD, foreground=self.MUTED, font=('Segoe UI', 10), cursor='arrow')
@@ -3076,6 +3101,39 @@ class App:
                 self.lists[tab].selection_set(sel[0])
                 self.lists[tab].see(sel[0])
                 self.picker_buttons()
+
+    def get_pictures(self):
+        """Download the figure pictures (download_pictures) without blocking the window, then reopen Add Skylander
+        with the Table / Pictures switch."""
+        from tkinter import messagebox
+        if not messagebox.askyesno('Get pictures', (
+                'Download pictures of all figures (about 13 MB) from github.com/rhsts/portalsync-pictures?\n\n'
+                'They are put in the "thumbnails" folder next to PortalSync. The artwork belongs to Activision; the '
+                'pictures were collected by fans.'), parent=self.picker):
+            return
+        result = {}
+        threading.Thread(target=lambda: result.update(done=self.try_download()), daemon=True).start()
+        self.say('Downloading figure pictures…')
+
+        def wait():
+            if 'done' not in result:
+                return self.root.after(200, wait)
+            n, error = result['done']
+            if error:
+                return self.say(f'Pictures not downloaded: {error}')
+            self.say(f'{n} figure pictures downloaded')
+            self.remember(picker_view='pictures')
+            if getattr(self, 'picker', None) is not None and self.picker.winfo_exists():
+                self.picker.destroy()
+            self.open_picker()
+        wait()
+
+    @staticmethod
+    def try_download():
+        try:
+            return download_pictures(), None
+        except (OSError, ValueError, __import__('zipfile').BadZipFile) as e:
+            return 0, e
 
     CARD_W, CARD_H = 136, 176  # a picture card in the Pictures view
 

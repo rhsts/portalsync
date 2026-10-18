@@ -116,7 +116,7 @@ First try **Settings… → Check setup…**. It checks usbip-win2, the portal a
   - **Swapper halves come together:** loading or creating one half of a Swap Force Swapper also brings its other half, unless a half of that kind is on the portal already.
   - **What you have:** the **YOU HAVE** column says **✓ Physical** (read from your real portal) or **On PC** (only a file: created or imported). The count ("You own 4 of 591") only counts physical figures.
   - **Favourites:** **★ Favourite** puts a ★ before a figure's name, in both lists, and the **Favourites** filter shows only those.
-  - **Pictures (optional):** with a `thumbnails` folder next to `PortalSync.exe`, holding a picture per figure named `<figure ID>_<variant>.png` (for example `25_0.png` for Zook), Add Skylander gets a **Table / Pictures** switch. The pictures are not included: the artwork belongs to Activision.
+  - **Pictures (optional):** click **Get pictures…** in Add Skylander to download pictures of all figures (about 13 MB) from [portalsync-pictures](https://github.com/rhsts/portalsync-pictures). Add Skylander then gets a **Table / Pictures** switch. The pictures are kept apart from this repository, because the artwork belongs to Activision. You can also use your own: a `thumbnails` folder next to `PortalSync.exe` with `<figure ID>_<variant>.png` files (for example `25_0.png` for Zook).
   - **Search** by name, ID, game or element, and **filter** by game, element and what you have. Click a game in the "You own … of …" line to filter on it, and click a column heading to sort.
   - **Browse files…** for any other `.sky` file, or **drag and drop** `.sky` files onto the window.
 - **Details** in the main window: level and gold, or "holds Bad Juju" for a trap.
