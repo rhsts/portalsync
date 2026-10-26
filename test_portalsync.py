@@ -125,6 +125,7 @@ def files():
 class FakeReal:
     def __init__(self, figures):
         self.figures, self.dev, self.sent = figures, None, []  # real slot -> bytearray(1024)
+        self.fail = {}  # block -> how many more writes of it time out
         self.io = threading.Lock()
 
     def present(self, seconds):
@@ -137,6 +138,9 @@ class FakeReal:
         return bytes(self.figures[i])
 
     def write_block(self, i, block, data):
+        if self.fail.get(block):
+            self.fail[block] -= 1
+            raise TimeoutError(f'block {block}: simulated failure')
         self.figures[i][block * 16:block * 16 + 16] = data
 
     def send(self, *cmd):
@@ -223,8 +227,10 @@ def restoring():
         assert (path, label, n) == (offer, 'Zook (86bc1263)', 1) and what.startswith('saved ') and ':' in what
 
         portal.command(bytes([ord('W'), 0x10, 6]) + bytes([4]) * 16)  # unsynced game progress (write-back off)
-        assert m.restore(offer) == '86bc1263'
+        job = m.restore(offer)
+        assert (job.uid, job.state) == ('86bc1263', 'queued')
         m.poll()  # the restore job
+        assert job.state == 'completed' and m.finished.get_nowait() is job
         s = portal.slots[0]
         snapshot, = kept()
         assert snapshot.startswith('Zook (86bc1263) - before restore ') and read(d, snapshot) == zook  # undo
@@ -257,6 +263,303 @@ def restoring():
                 assert False, f'{bad} restored'
             except ValueError:
                 pass
+
+
+def restore_setup(d):
+    """(portal, mirror, restored data, path of a saved copy) for Zook on real slot 2; restore retries don't sleep."""
+    pb.DUMPS = d
+    fake_bin(d)
+    server = Server(Portal(DESC.r_reply), DESC)
+    m = pb.Mirror(server, vhci_bus=3)
+    m.RETRY_DELAY = 0
+    m.real = FakeReal({2: bytearray(figure('86bc1263'))})
+    m.poll()
+    new = bytearray(figure('86bc1263'))
+    new[80:96], new[96:112], new[144:160] = bytes([9]) * 16, bytes([8]) * 16, bytes([7]) * 16  # blocks 5, 6, 9
+    path = os.path.join(d, 'progress.sky')
+    with open(path, 'wb') as f:
+        f.write(new)
+    return server.portal, m, bytes(new), path
+
+
+def restore_retries():
+    """A restore retries a block that fails, works with write-back off, and the window hears what happened."""
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        assert not m.write_back  # explicit restores write directly
+        m.real.fail = {6: 2}  # transient: the third attempt works
+        job = m.restore(path)
+        m.poll()
+        assert (job.state, job.written, job.total, job.message) == ('completed', 3, 3, '')
+        assert bytes(m.real.figures[2]) == new == bytes(portal.slots[0].data) and m.finished.get_nowait() is job
+        said = []
+        ui = SimpleNamespace(say=said.append, alert=lambda msg, ask=False: said.append(msg), mirror=m)
+        pb.App.restore_ended(ui, job)
+        assert said == ['Restored progress.sky to figure 86bc1263: 3 block(s) written and verified.']
+        job.done = 'Repaired.'
+        pb.App.restore_ended(ui, job)
+        assert said[-1] == 'Repaired.'
+
+
+def restore_incomplete():
+    """A block that keeps failing ends incomplete; the before-restore copy stays the backup and a retry reuses it."""
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        zook = figure('86bc1263')
+        before = lambda: [f for f in os.listdir(d) if ' - before restore ' in f]
+        m.real.fail = {6: 99}
+        job = m.restore(path)
+        m.poll()
+        assert (job.state, job.written, job.total, job.message) == ('incomplete', 2, 3, '')
+        assert pb.backups('86bc1263')['86bc1263'] == [job.snapshot] and open(job.snapshot, 'rb').read() == zook
+        said, answers = [], [True]
+        ui = SimpleNamespace(say=said.append, alert=lambda msg, ask=False: said.append(msg) or answers.pop(), mirror=m)
+        assert m.finished.get_nowait() is job
+        pb.App.restore_ended(ui, job)
+        assert said[0].startswith('Writing progress.sky to figure 86bc1263 is incomplete: 2 of 3 blocks were written')
+        assert f'({os.path.basename(job.snapshot)})' in said[0] and said[1] == 'Writing progress.sky to figure 86bc1263…'
+        m.real.fail = {}
+        m.poll()  # the retry the Yes queued
+        retry = m.finished.get_nowait()
+        assert retry is not job and (retry.state, retry.written, retry.total) == ('completed', 1, 1)
+        assert retry.snapshot == job.snapshot and before() == [os.path.basename(job.snapshot)]  # no half-written backup
+        assert pb.backups('86bc1263')['86bc1263'] == [job.snapshot] and bytes(m.real.figures[2]) == new
+
+
+def restore_swapped():
+    """A figure replaced before or during a restore never gets written."""
+    other = figure('aabbccdd')
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        job = m.restore(path)
+        m.real.figures[2] = bytearray(other)  # swapped before the job ran
+        m.poll()
+        assert job.state == 'cancelled' and 'another figure' in job.message and bytes(m.real.figures[2]) == other
+        said = []
+        pb.App.restore_ended(SimpleNamespace(say=said.append), job)
+        assert said == ['Not written to figure 86bc1263: another figure is in real slot 2']
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        real, read = m.real, m.real.read_block
+
+        def read_then_swap(i, block):  # swapped right after block 5 was verified
+            r = read(i, block)
+            if block == 5:
+                real.figures[i] = bytearray(other)
+            return r
+        real.read_block = read_then_swap
+        job = m.restore(path)
+        m.poll()
+        assert (job.state, job.written, job.total) == ('incomplete', 1, 3) and 'replaced' in job.message
+        assert bytes(real.figures[2]) == other  # nothing written to the wrong figure
+
+
+def restore_order():
+    """Queued game writes never land over a restore: older ones run first, stale retries and data are dropped."""
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        game_write = lambda block, b: portal.command(bytes([ord('W'), 0x10, block]) + bytes([b]) * 16)
+        m.set_write_back(True)
+        game_write(5, 1)  # queued before the restore: runs first, so the snapshot holds it
+        job = m.restore(path)
+        m.poll()
+        assert job.state == 'completed' and open(job.snapshot, 'rb').read()[80:96] == bytes([1]) * 16
+        assert bytes(m.real.figures[2]) == new
+
+        old = m.real.figures[2][:] = figure('86bc1263')  # as if never restored, so each restore has work to do
+        m.RETRY_DELAY = 1000
+        m.real.fail = {6: 1}
+        game_write(6, 2)
+        m.poll()  # the write fails: a retry waits
+        assert m.retries
+        job = m.restore(path)
+        for r in m.retries.values():
+            r.due = 0  # due by the time the restore ran
+        m.poll()
+        assert (job.state, job.written) == ('completed', 3) and not m.retries and bytes(m.real.figures[2]) == new
+
+        m.real.figures[2][:] = old
+        job = m.restore(path)
+        game_write(5, 3)  # old data queued after the restore was asked, before it ran
+        m.poll()
+        assert (job.state, job.written) == ('completed', 3)
+        assert bytes(m.real.figures[2]) == new == bytes(portal.slots[0].data)
+
+
+def restore_unsaved():
+    """A game copy whose last save failed: the restore keeps those bytes as a copy, never rescues them over the
+    restored file, and leaves one slot for the figure."""
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        s = portal.slots[0]
+        s.data[160:176], s.unsaved, s.attempt = bytes([5]) * 16, 'simulated: disk full', 2  # block 10, only in memory
+        mirror_file = s.path
+
+        def no_rescue(slot):
+            raise AssertionError('rescue would write the old game bytes over the restored file')
+        portal.rescue = no_rescue
+        job = m.restore(path)
+        m.poll()
+        assert job.state == 'completed' and open(mirror_file, 'rb').read() == new
+        loaded = [x for x in portal.slots if x.path == mirror_file]
+        assert len(loaded) == 1 and loaded[0].unsaved is None and bytes(loaded[0].data) == new
+        binned = [open(os.path.join(d, 'bin', f), 'rb').read() for f in os.listdir(os.path.join(d, 'bin'))]
+        assert any(b[160:176] == bytes([5]) * 16 for b in binned)  # the unsaved progress: recoverable, not lost
+
+
+def restore_cancel():
+    """cancel_pending_restores ends queued restores as cancelled and keeps other jobs in order; so does a lost portal."""
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        m.set_write_back(True)
+        portal.command(b'C\xff\x00\x00')  # light
+        job = m.restore(path)
+        portal.command(bytes([ord('W'), 0x10, 5]) + bytes([1]) * 16)
+        m.cancel_pending_restores('PortalSync is closing')
+        assert (job.state, job.message) == ('cancelled', 'PortalSync is closing') and m.finished.get_nowait() is job
+        assert [j[0] for j in m.jobs.queue] == ['raw', 'write']
+        m.poll()
+        assert m.real.figures[2][80:96] == bytes([1]) * 16 and m.real.figures[2][96:112] == bytes(16)  # no restore
+        job = m.restore(path)
+        m.release()
+        assert job.state == 'cancelled' and m.finished.get_nowait() is job and m.jobs.empty()
+
+
+def cancelled_wait():
+    """RealPortal.wait ends at once when cancelled, instead of after its timeout."""
+    class Dev:
+        def read(self, ep, n, timeout):
+            time.sleep(0.01)
+            return b'S'.ljust(32, b'\0')  # never the awaited reply
+    stop = threading.Event()
+    rp = pb.RealPortal(Dev(), stop.is_set)
+    threading.Timer(0.1, stop.set).start()
+    t = time.monotonic()
+    try:
+        rp.wait('Q', timeout=5)
+        assert False, 'no reply expected'
+    except TimeoutError as e:
+        assert 'closing' in str(e) and time.monotonic() - t < 1
+
+
+def stop_setup(d, blocking_write):
+    """restore_setup with a restore running in the Mirror thread, stuck in blocking_write; returns
+    (mirror, job, what happened: ('release', thread alive?) entries)."""
+    portal, m, new, path = restore_setup(d)
+    started, events = threading.Event(), []
+    m.real.write_block = lambda i, block, data: (started.set(), blocking_write(m))
+    release = m.release
+    m.release = lambda: (events.append(('release', m.thread.is_alive())), release())
+    job = m.restore(path)
+    m.thread = threading.Thread(target=m.run, daemon=True)
+    m.thread.start()
+    assert started.wait(5)
+    return m, job, events
+
+
+def stop_running_restore():
+    """stop() ends a running restore through its error path, then lets go of USB once the thread ended."""
+    def until_cancelled(m):  # like RealPortal.wait
+        while not m.stopping:
+            time.sleep(0.01)
+        raise TimeoutError('PortalSync is closing')
+    real_devices, pb.portal_devices = pb.portal_devices, lambda: []
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            m, job, events = stop_setup(d, until_cancelled)
+            m.STOP_TIMEOUT = 5
+            assert m.stop() is True and not m.thread.is_alive()
+            assert (job.state, job.message) == ('cancelled', 'PortalSync is closing') and m.finished.get_nowait() is job
+            assert events == [('release', False)] and m.real is None
+    finally:
+        pb.portal_devices = real_devices
+
+
+def stop_timeout():
+    """A thread that does not stop in time: stop() says so and leaves the USB handle alone."""
+    go = threading.Event()
+    with tempfile.TemporaryDirectory() as d:
+        m, job, events = stop_setup(d, lambda m: go.wait(5))  # ignores the cancel
+        m.STOP_TIMEOUT = 0.2
+        assert m.stop() is False and events == [] and m.real is not None
+        go.set()
+        m.thread.join(5)
+        assert not m.thread.is_alive() and events == []
+
+
+def stop_refuses():
+    """After stop(): game writes queue nothing, restores are refused, and queued write-backs are reported."""
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        game_write = lambda block, b: portal.command(bytes([ord('W'), 0x10, block]) + bytes([b]) * 16)
+        m.set_write_back(True)
+        game_write(5, 1)
+        game_write(6, 1)
+        m.thread = SimpleNamespace(join=lambda timeout: None, is_alive=lambda: True)  # still busy: slots stay
+        seen = len(pb.LOG_LINES)
+        assert m.stop() is False and m.jobs.empty() and m.slots
+        assert any('2 game save block(s) not written' in line for _, line in list(pb.LOG_LINES)[seen:])
+        game_write(7, 1)
+        assert m.jobs.empty()
+        for call in (lambda: m.restore(path), lambda: m.write_image('86bc1263', bytes, 'x')):
+            try:
+                call()
+                assert False, 'work accepted while closing'
+            except ValueError as e:
+                assert str(e) == 'PortalSync is closing'
+
+
+def shutting_down():
+    """shutdown(): a failing step doesn't skip the rest; progress the disk refuses at exit is rescued."""
+    real_save, real_unsaved, real_usbip = pb.save_dump, pb.UNSAVED, pb.usbip
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            pb.DUMPS, pb.UNSAVED = d, os.path.join(d, 'rescue')
+            path = os.path.join(d, 'Zook (0a0b0c0d) - current.sky')
+
+            def save(p, data):
+                if p == path:
+                    raise OSError(28, 'No space left on device')
+                real_save(p, data)
+            pb.save_dump = save
+            server = Server(Portal(DESC.r_reply), DESC)
+            closed, calls = [], []
+            server.sound = SimpleNamespace(close=lambda: closed.append('sound'))
+            n = server.portal.load(figure('0a0b0c0d'), path)
+            server.portal.write(n, 5, bytes([7]) * 16)
+            assert server.portal.slots[n].unsaved
+
+            def broken():
+                raise OSError('simulated')
+            pb.usbip = lambda *a: calls.append(a) or (0, '')
+            pb.shutdown(server, None, pb.re.search(r'port\D*(\d+)', 'port: 1'), SimpleNamespace(close=broken))
+            assert calls == [('detach', '-p', '1')] and closed == ['sound']
+            rescued = os.listdir(pb.UNSAVED)
+            assert len(rescued) == 1 and open(os.path.join(pb.UNSAVED, rescued[0]), 'rb').read()[80:96] == bytes([7]) * 16
+            assert server.portal.slots[n].unsaved is None
+            assert any('could not save every figure' in line for _, line in pb.LOG_LINES)
+    finally:
+        pb.save_dump, pb.UNSAVED, pb.usbip = real_save, real_unsaved, real_usbip
+
+
+def incomplete_kept():
+    """After an incomplete restore, lifting and placing the figure again keeps its before-restore snapshot, until
+    a restore of it completes."""
+    with tempfile.TemporaryDirectory() as d:
+        portal, m, new, path = restore_setup(d)
+        m.real.fail = {6: 99}
+        job = m.restore(path)
+        m.poll()
+        assert job.state == 'incomplete' and m.unfinished == {'86bc1263': job.snapshot}
+        half = m.real.figures.pop(2)
+        m.poll()  # lifted
+        m.real.figures[2] = half
+        m.poll()  # placed again: the restored game copy differs from the figure, so it is archived
+        assert os.path.exists(job.snapshot) and len(pb.backups('86bc1263')['86bc1263']) == 2
+        m.real.fail = {}
+        retry = m.restore(path)
+        m.poll()
+        assert retry.state == 'completed' and not m.unfinished
 
 
 def sound():
@@ -420,6 +723,73 @@ def file_trouble():
         assert m.failed == {0} and m.real is not None and not m.slots
 
 
+def unsaved_progress():
+    """A dump that can't be written: the game's write is still acked, the slot is marked unsaved and retried with
+    backoff, and its progress is never dropped (its own file, else a rescue copy, else it stays loaded)."""
+    real_save, real_unsaved = pb.save_dump, pb.UNSAVED
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            pb.DUMPS, pb.UNSAVED = d, os.path.join(d, 'rescue')
+            path = os.path.join(d, 'Zook (0a0b0c0d) - current.sky')
+            broken = {path}
+
+            def save(p, data):
+                if p in broken:
+                    raise OSError(28, 'No space left on device')
+                real_save(p, data)
+            pb.save_dump = save
+            portal = Portal(DESC.r_reply)
+            n = portal.load(figure('0a0b0c0d'), path)
+            s = portal.slots[n]
+            assert portal.write(n, 5, bytes([7]) * 16) == bytes([0x57, 0x10 | n, 5])  # acked as saved
+            assert s.unsaved and s.attempt == 1 and s.data[80:96] == bytes([7]) * 16
+            word, text = pb.unsaved_state(s)
+            assert word == '⚠ Not saved to disk' and 'Zook (0a0b0c0d) - current.sky' in text and 'No space' in text
+            assert portal.notices.get_nowait() == text and portal.notices.empty()  # one pop-up
+
+            t = s.due  # 1 s after the failure, then 2, 4… at most 30
+            portal.retry_saves(t - 0.1)
+            assert s.attempt == 1
+            portal.retry_saves(t)
+            assert s.attempt == 2 and s.due == t + 2
+            for _ in range(8):
+                t = s.due
+                portal.retry_saves(t)
+            assert s.attempt == 10 and s.due == t + 30 and portal.notices.empty()  # capped; retries say nothing
+
+            portal.write(n, 6, bytes([8]) * 16)
+            broken.clear()
+            portal.retry_saves(s.due)
+            assert s.unsaved is None and s.attempt == 0 and pb.unsaved_state(s) is None
+            assert open(path, 'rb').read() == bytes(s.data) and s.data[96:112] == bytes([8]) * 16
+
+            broken.add(path)  # lifted while the disk still fails: a rescue copy
+            portal.write(n, 6, bytes([9]) * 16)
+            portal.notices.get_nowait()
+            assert portal.remove(n) and s.path is None and s.unsaved is None
+            rescued = os.listdir(pb.UNSAVED)
+            assert len(rescued) == 1 and rescued[0].startswith('Zook (0a0b0c0d) - current 20')
+            assert open(os.path.join(pb.UNSAVED, rescued[0]), 'rb').read()[96:112] == bytes([9]) * 16
+            assert os.path.join(pb.UNSAVED, rescued[0]) in portal.notices.get_nowait()
+
+            n = portal.load(figure('0a0b0c0d'), path)  # the rescue fails too: nothing let go
+            s = portal.slots[n]
+            portal.write(n, 6, bytes([10]) * 16)
+            open(os.path.join(d, 'file'), 'w').close()
+            pb.UNSAVED = os.path.join(d, 'file', 'rescue')
+            assert not portal.remove(n) and s.path == path and s.status & 1 and s.unsaved
+            assert s.data[96:112] == bytes([10]) * 16
+            done = portal.rescue_unsaved()
+            assert len(done) == 1 and done[0][0] == 'Zook' and isinstance(done[0][1], OSError) and s.unsaved
+
+            pb.UNSAVED = os.path.join(d, 'rescue')
+            done = portal.rescue_unsaved()
+            assert done[0][0] == 'Zook' and open(done[0][1], 'rb').read() == bytes(s.data) and s.unsaved is None
+            assert portal.rescue_unsaved() == [] and len(os.listdir(pb.UNSAVED)) == 2
+    finally:
+        pb.save_dump, pb.UNSAVED = real_save, real_unsaved
+
+
 CHILD = """import ctypes, sys, time
 ctypes.WinDLL('setupapi')  # portal_hide.dll patches it, like in Cemu which imports it
 k = ctypes.WinDLL('kernel32')
@@ -434,6 +804,8 @@ sys.exit(0 if k.GetModuleHandleW('portal_hide.dll') else 1)
 
 def injection():
     """inject() gets portal_hide.dll into another process, the way PortalSync does it to Cemu."""
+    if not os.environ.get('PORTALSYNC_TEST_INJECT'):  # injects a DLL into another process: opt-in only
+        return print('injection not checked (set PORTALSYNC_TEST_INJECT=1 to check it)')
     if not os.path.exists(pb.HIDE_DLL):
         return print('portal_hide.dll not built: injection not checked')
     child = subprocess.Popen([sys.executable, '-I', '-c', CHILD], stdout=subprocess.PIPE, text=True)
@@ -713,36 +1085,135 @@ def extras():
         assert pb.compare_progress(richer, newer) == 'same level, +300 gold'
         assert pb.compare_progress(newer, newer, same=True) == 'same as the figure'
 
-        z = io.BytesIO()  # the update installer: new files in place, old ones as .old, settings untouched
-        with zipfile.ZipFile(z, 'w') as zf:
-            for name, body in (('PortalSync.exe', b'new exe'), ('portal_hide.dll', b'new dll'), ('settings.json', b'{}')):
-                zf.writestr(name, body)
-        app = os.path.join(d, 'app')
-        os.makedirs(app)
-        for name in ('PortalSync.exe', 'settings.json'):
-            open(os.path.join(app, name), 'wb').write(b'old')
-        import urllib.request
-        saved, urllib.request.urlopen = urllib.request.urlopen, lambda req, timeout: io.BytesIO(z.getvalue())
+        import urllib.request  # the update installer: see updating()
+        pics = io.BytesIO()  # Get pictures: only '<id>_<variant>.png' names, and never outside the folder
+        with zipfile.ZipFile(pics, 'w') as zf:
+            for name in ('thumbnails/25_0.png', '../../evil_1.png', 'thumbnails/ATTRIBUTION.md', 'x.exe', '613_20480.png'):
+                zf.writestr(name, b'png')
+        saved, urllib.request.urlopen = urllib.request.urlopen, lambda req, timeout: io.BytesIO(pics.getvalue())
         try:
-            try:
-                pb.install_update('https://example.com/PortalSync-v9.zip', app)
-                raise AssertionError('accepted a zip from elsewhere')
-            except ValueError:
-                pass
-            assert pb.install_update(pb.DOWNLOADS + 'v9.0.0/PortalSync-v9.0.0.zip', app) == ['PortalSync.exe', 'portal_hide.dll']
-            pics = io.BytesIO()  # Get pictures: only '<id>_<variant>.png' names, and never outside the folder
-            with zipfile.ZipFile(pics, 'w') as zf:
-                for name in ('thumbnails/25_0.png', '../../evil_1.png', 'thumbnails/ATTRIBUTION.md', 'x.exe', '613_20480.png'):
-                    zf.writestr(name, b'png')
-            urllib.request.urlopen = lambda req, timeout: io.BytesIO(pics.getvalue())
             shelf = os.path.join(d, 'pictures')
             assert pb.download_pictures('https://example.com/t.zip', shelf) == 2
             assert sorted(os.listdir(shelf)) == ['25_0.png', '613_20480.png'] and not os.path.exists(os.path.join(d, 'evil_1.png'))
         finally:
             urllib.request.urlopen = saved
-        files = {n: open(os.path.join(app, n), 'rb').read() for n in os.listdir(app)}
-        assert files == {'PortalSync.exe': b'new exe', 'PortalSync.exe.old': b'old', 'portal_hide.dll': b'new dll',
-                         'settings.json': b'old'}, files
+
+
+def updating():
+    """install_update: only the allowlisted files, checked and size-capped before writing, all or none (a failure
+    mid-swap puts the old files back); recover_update undoes a swap cut off by a crash. User data is never touched."""
+    import io, json, urllib.request, zipfile
+    url = pb.DOWNLOADS + 'v9.0.0/PortalSync-v9.0.0.zip'
+    release = {n: b'MZnew ' + n.encode() for n in pb.REQUIRED_FILES} | {'README.md': b'new readme'}
+
+    def zipped(files, sizes=None):
+        z = io.BytesIO()
+        with zipfile.ZipFile(z, 'w') as zf:
+            for name, body in files.items():
+                zf.writestr(name, body)
+        if sizes:  # lie about unpacked sizes in the central directory, the way a hostile zip could
+            zf = zipfile.ZipFile(z, 'a')
+            for info in zf.infolist():
+                info.file_size = sizes.get(info.filename, info.file_size)
+            zf._didModify = True  # rewrite the central directory on close
+            zf.close()
+        return z.getvalue()
+
+    def tree(folder):
+        out = {}
+        for root, _, names in os.walk(folder):
+            for n in names:
+                out[os.path.relpath(os.path.join(root, n), folder)] = open(os.path.join(root, n), 'rb').read()
+        return out
+
+    user = {'settings.json': b'{"mine": 1}', os.path.join('dumps', 'a.sky'): b'sky', 'portalsync.log': b'log',
+            os.path.join('thumbnails', '25_0.png'): b'png'}
+    old = {n: b'old ' + n.encode() for n in pb.REQUIRED_FILES}
+    saved_open, saved_replace, saved_recycle = urllib.request.urlopen, os.replace, pb.recycle
+    with tempfile.TemporaryDirectory() as d:
+        def fresh():
+            app = tempfile.mkdtemp(dir=d)
+            for name, body in (old | user).items():
+                os.makedirs(os.path.dirname(os.path.join(app, name)), exist_ok=True)
+                open(os.path.join(app, name), 'wb').write(body)
+            return app
+
+        def refused(data, app, why):
+            urllib.request.urlopen = lambda req, timeout: io.BytesIO(data)
+            before = tree(app)
+            try:
+                pb.install_update(url, app)
+                raise AssertionError(f'installed despite {why}')
+            except ValueError as e:
+                assert why in str(e), e
+            assert tree(app) == before, why  # nothing written
+
+        fake_bin(d)
+        try:
+            app = fresh()
+            try:
+                pb.install_update('https://example.com/PortalSync-v9.zip', app)
+                raise AssertionError('accepted a zip from elsewhere')
+            except ValueError:
+                pass
+            refused(zipped({n: b for n, b in release.items() if n != 'figure_names.json'}), app, 'figure_names.json')
+            refused(zipped(release | {'PortalSync.exe': b'not a program'}), app, 'not a Windows program')
+            refused(zipped(release | {'PortalSync/PortalSync.exe': b'MZ2'}), app, 'more than one PortalSync.exe')
+            refused(b'not a zip', app, 'not a valid zip')
+            refused(zipped(release, {'figure_names.json': pb.UPDATE_FILE_MAX + 1}), app, 'too large (figure_names.json)')
+            refused(zipped(release, {'README.md': 99}), app, 'not the size it claims')  # file_size lies high
+            refused(zipped(release, {'README.md': 2}), app, 'not a valid zip')  # lies low: the CRC check catches it
+            cap, pb.UPDATE_MAX = pb.UPDATE_MAX, 100  # a download over the cap
+            try:
+                refused(zipped(release), app, 'larger than')
+            finally:
+                pb.UPDATE_MAX = cap
+
+            # success: every file replaced, the old ones as .old, user data and evil names ignored
+            evil = {'../x': b'x', 'settings.json': b'{}', 'dumps/a.sky': b'evil', 'PortalSync/LICENSE.txt': b'?'}
+            urllib.request.urlopen = lambda req, timeout: io.BytesIO(zipped(
+                {f'PortalSync/{n}': b for n, b in release.items()} | evil))
+            assert pb.install_update(url, app) == sorted(release)
+            want = user | release | {n + '.old': b for n, b in old.items()}
+            assert tree(app) == want, sorted(tree(app))
+            assert not os.path.exists(os.path.join(d, 'x'))
+            assert pb.install_update(url, app) == sorted(release)  # again: the earlier .old files go to the bin first
+            assert tree(app) == want | {'README.md.old': b'new readme'} | {n + '.old': b for n, b in release.items()}
+
+            # a failure on the 3rd file mid-swap: all old files back, no journal, no .new
+            app = fresh()
+            urllib.request.urlopen = lambda req, timeout: io.BytesIO(zipped(release))
+
+            def flaky(src, dst):
+                if src.endswith('portal_descriptors.json.new'):
+                    raise PermissionError('in use')
+                return saved_replace(src, dst)
+            os.replace = flaky
+            try:
+                pb.install_update(url, app)
+                raise AssertionError('the swap failure was hidden')
+            except OSError as e:
+                assert 'in use' in str(e) and 'the old version is kept' in str(e), e
+            finally:
+                os.replace = saved_replace
+            assert tree(app) == old | user, sorted(tree(app))
+
+            # a crash after 2 files were swapped and the 3rd half-way: recover_update puts the old ones back
+            app = fresh()
+            assert pb.recover_update(app) is None  # no journal: nothing to do
+            exe, dll, desc = (os.path.join(app, n) for n in pb.REQUIRED_FILES[:3])
+            for path in (exe, dll):
+                os.replace(path, path + '.old')
+                open(path, 'wb').write(b'new')
+            os.replace(desc, desc + '.old')  # cut off before its .new took its place
+            for n in pb.REQUIRED_FILES[2:] + ('README.md',):
+                open(os.path.join(app, n + '.new'), 'wb').write(b'new')
+            plan = {n: 'replace' for n in pb.REQUIRED_FILES} | {'README.md': 'add'}
+            json.dump({'files': plan}, open(os.path.join(app, pb.UPDATE_JOURNAL), 'w'))
+            assert pb.recover_update(app) == sorted(pb.REQUIRED_FILES[:3])
+            assert tree(app) == old | user, sorted(tree(app))
+        finally:
+            urllib.request.urlopen, os.replace, pb.recycle = saved_open, saved_replace, saved_recycle
 
 
 def setup_checking():
@@ -768,6 +1239,7 @@ def main():
     reading(pb.figure_info)
     setup_checking()
     extras()
+    updating()
     pb.figure_info = lambda data: SimpleNamespace(kind='other', level=None, gold=None, nickname='', damaged=False,
                                                   old_damaged=False)  # the other tests' saves are made-up bytes
     names()
@@ -775,6 +1247,18 @@ def main():
     files()
     mirror()
     restoring()
+    restore_retries()
+    restore_incomplete()
+    restore_swapped()
+    restore_order()
+    restore_unsaved()
+    restore_cancel()
+    cancelled_wait()
+    stop_running_restore()
+    stop_timeout()
+    stop_refuses()
+    shutting_down()
+    incomplete_kept()
     sound()
     speaker()
     lifted_mid_write()
@@ -784,6 +1268,7 @@ def main():
     game_first()
     contention()
     file_trouble()
+    unsaved_progress()
     injection()
     portal = Portal(DESC.r_reply)
     figure = bytes(range(256)) * 4
