@@ -1,0 +1,4505 @@
+{
+ "source": "Skylanders Wiki (skylanders.fandom.com), CC-BY-SA 3.0",
+ "figures": {
+  "0": {
+   "page": "Whirlwind",
+   "basic": [
+    "Rainbow Chain",
+    "Triple Tempest",
+    "Dragon Flight",
+    "Dual Rainbows"
+   ],
+   "soulgem": "Rainbow of Healing",
+   "paths": [
+    "Ultimate Rainbower",
+    "Tempest Dragon"
+   ],
+   "path1": [
+    "Double Dose of Doom",
+    "Atomic Rainbow",
+    "Rainbow Singularity"
+   ],
+   "path2": [
+    "Triple Rainbow, It's Full On",
+    "Tempest Tantrum",
+    "Tempest Matrix"
+   ],
+   "wowpow": "Cloudbursting"
+  },
+  "1": {
+   "page": "Sonic Boom",
+   "basic": [
+    "Loudmouth",
+    "Let There Be Flight",
+    "Ride of the Valkyries",
+    "Three's A Crowd"
+   ],
+   "soulgem": "Resonant Frequency",
+   "paths": [
+    "Medea Griffin",
+    "Siren Griffin"
+   ],
+   "path1": [
+    "Sunny Side Up",
+    "Sibling Rivalry",
+    "Terrible Twos"
+   ],
+   "path2": [
+    "Echolocation",
+    "Egg Shocker",
+    "More Boom!"
+   ],
+   "wowpow": "Super Baby"
+  },
+  "2": {
+   "page": "Warnado",
+   "basic": [
+    "Sharp Shell",
+    "Extended Tornado",
+    "High Winds",
+    "Whirlwind Flight"
+   ],
+   "soulgem": "Thick Shelled",
+   "paths": [
+    "Eye of the Storm",
+    "Wind Master"
+   ],
+   "path1": [
+    "Low Friction Shell",
+    "Flying Mini Turtles",
+    "Turtle Slam"
+   ],
+   "path2": [
+    "Guided Twister",
+    "Summon Cyclone",
+    "Wind Elemental"
+   ],
+   "wowpow": ""
+  },
+  "3": {
+   "page": "Lightning Rod",
+   "basic": [
+    "Lightning Lancer",
+    "Thunderation",
+    "Zapper Field",
+    "Lightning Harpoon"
+   ],
+   "soulgem": "Zapper Field Deluxe",
+   "paths": [
+    "Lightning Lord",
+    "Typhoon Titan"
+   ],
+   "path1": [
+    "Faster Caster",
+    "Electricity City",
+    "Lightning Avatar"
+   ],
+   "path2": [
+    "Cloud Zapper Satellite",
+    "Zappier Sats",
+    "Zapper Satellite Defense"
+   ],
+   "wowpow": "Big Bolt"
+  },
+  "4": {
+   "page": "Bash",
+   "basic": [
+    "Tennis Tail",
+    "Iron Tail",
+    "Summoning: Stone Projection",
+    "Double Roll"
+   ],
+   "soulgem": "Triceratops Honor Guard",
+   "paths": [
+    "Granite Dragon",
+    "Pulver Dragon"
+   ],
+   "path1": [
+    "Mace of Destruction",
+    "Summoning: Stone Uppercut",
+    "Gaia Hammer"
+   ],
+   "path2": [
+    "Pulver Roll",
+    "Earthen Force Roll",
+    "Continental Boulder"
+   ],
+   "wowpow": "Rolling Thunder"
+  },
+  "5": {
+   "page": "Terrafin",
+   "basic": [
+    "Brass Knuckles",
+    "Mega Bellyflop",
+    "Feeding Frenzy",
+    "Multi Target Punches"
+   ],
+   "soulgem": "Surface Feeder",
+   "paths": [
+    "Sandhog",
+    "Brawler"
+   ],
+   "path1": [
+    "Master Earth Swimmer",
+    "Homing Frenzy",
+    "Razorfin"
+   ],
+   "path2": [
+    "Pugilist",
+    "Spiked Knuckles",
+    "Frenzy Shield"
+   ],
+   "wowpow": "Dive Burrow"
+  },
+  "6": {
+   "page": "Dino-Rang",
+   "basic": [
+    "Basalt Boomerangs",
+    "Boomerang Finesse",
+    "Stonefist Traps",
+    "Dervish Shield"
+   ],
+   "soulgem": "Sticky Boomerangs",
+   "paths": [
+    "Grand Boomerang Master",
+    "Earthen Avenger"
+   ],
+   "path1": [
+    "Volcanic Glass Boomerangs",
+    "Dancing Boomerangs",
+    "It's All In The Wrist"
+   ],
+   "path2": [
+    "Quad Stonefist Trap",
+    "Obsidian Armor",
+    "Fist Trap Funeral"
+   ],
+   "wowpow": ""
+  },
+  "7": {
+   "page": "Prism Break",
+   "basic": [
+    "Super Crystal Shard",
+    "Crystal Eruption",
+    "Emerald Energy Beam",
+    "Chained Refractions"
+   ],
+   "soulgem": "Shard Soul Prison",
+   "paths": [
+    "Crystaleer",
+    "Prismancer"
+   ],
+   "path1": [
+    "Massive Crystal Eruption",
+    "Triple Crystal Shard",
+    "Crystalline Armor"
+   ],
+   "path2": [
+    "Golden Diamond Energy Beam",
+    "Triple Refracted Beam",
+    "Focused Energy"
+   ],
+   "wowpow": "Pulse Power"
+  },
+  "8": {
+   "page": "Sunburn",
+   "basic": [
+    "Guided Teleportation",
+    "Blazethrower",
+    "Phoenix Dash",
+    "Immolation Inflammation"
+   ],
+   "soulgem": "Flight of the Phoenix",
+   "paths": [
+    "Blaze Dragon",
+    "Flame Lord"
+   ],
+   "path1": [
+    "Infinite Flame",
+    "Intense Heat",
+    "Phoenix Grand Blaze"
+   ],
+   "path2": [
+    "Immolation Destruction",
+    "Flame Streaks",
+    "Burning Trail"
+   ],
+   "wowpow": ""
+  },
+  "9": {
+   "page": "Eruptor",
+   "basic": [
+    "Big Blob Lava Throw",
+    "Fiery Remains",
+    "Eruption-Flying Tephra",
+    "Magma Ball"
+   ],
+   "soulgem": "Mega Magma Balls",
+   "paths": [
+    "Magmantor",
+    "Volcanor"
+   ],
+   "path1": [
+    "Heavy Duty Plasma",
+    "Lava Blob Bomb",
+    "Beasts of Conflagration"
+   ],
+   "path2": [
+    "Quick Eruption",
+    "Pyroxysmal Super Eruption",
+    "Revenge of Prometheus"
+   ],
+   "wowpow": "Lava Barf"
+  },
+  "10": {
+   "page": "Ignitor",
+   "basic": [
+    "Scorching Blade",
+    "Flame Form",
+    "Mega Slam",
+    "Fire and Brimstone"
+   ],
+   "soulgem": "Fire Forged Armor",
+   "paths": [
+    "Soul of the Flame",
+    "Blademaster"
+   ],
+   "path1": [
+    "Dances with Fire",
+    "Incinerate",
+    "Fire Form Salvo"
+   ],
+   "path2": [
+    "Order of the Burning Blade",
+    "Double Mega Slam",
+    "Inferno Blade"
+   ],
+   "wowpow": "Blue Flame"
+  },
+  "11": {
+   "page": "Flameslinger",
+   "basic": [
+    "Searing Arrow",
+    "Column of Fire",
+    "Volley Shot",
+    "Hyper Shot"
+   ],
+   "soulgem": "Super Volley Shot",
+   "paths": [
+    "Marksman",
+    "Pyromancer"
+   ],
+   "path1": [
+    "Hellfire Arrows",
+    "Explosive Arrows",
+    "Triple Shot Arrows"
+   ],
+   "path2": [
+    "Napalm Tipped Arrows",
+    "Inferno Blast",
+    "Supernova"
+   ],
+   "wowpow": "Speed Demon"
+  },
+  "12": {
+   "page": "Zap",
+   "basic": [
+    "Electro-Slime",
+    "Stay Awhile",
+    "MegaVolt",
+    "Wave Rider"
+   ],
+   "soulgem": "Love for the Sea",
+   "paths": [
+    "Tesla Dragon",
+    "Slime Serpent"
+   ],
+   "path1": [
+    "Lightning Strikes Twice",
+    "Electric Wave",
+    "Tesla Storm"
+   ],
+   "path2": [
+    "Strength in Numbers",
+    "Charged with Punishment",
+    "More Electro'd Slime"
+   ],
+   "wowpow": "For Riley"
+  },
+  "13": {
+   "page": "Wham-Shell",
+   "basic": [
+    "Starfishicus Giganticus",
+    "King's Mace",
+    "Starfishicus Superioralis",
+    "Poseidon Strike"
+   ],
+   "soulgem": "Carapace Plating",
+   "paths": [
+    "Captain Crustacean",
+    "Commander Crab"
+   ],
+   "path1": [
+    "Crustacean Combos",
+    "Mega Trident",
+    "Mace of the Deep"
+   ],
+   "path2": [
+    "Triplicate Starfish",
+    "Semi-Eternal Pursuit",
+    "Nightmare Huggers"
+   ],
+   "wowpow": ""
+  },
+  "14": {
+   "page": "Gill Grunt",
+   "basic": [
+    "Barbed Harpoons",
+    "high pressure power hose",
+    "harpoon repeater",
+    "Water Jetpack"
+   ],
+   "soulgem": "Anchor Cannon",
+   "paths": [
+    "harpooner",
+    "water beaver"
+   ],
+   "path1": [
+    "quadent harpoons",
+    "piercing harpoons",
+    "triple-shot harpoon"
+   ],
+   "path2": [
+    "reservant water tank",
+    "boiling walter hose",
+    "neptune gun (does not shoot the aforementioned planet)"
+   ],
+   "wowpow": "Anchor's Away"
+  },
+  "15": {
+   "page": "Slam Bam",
+   "basic": [
+    "Three's A Charm",
+    "Arctic Explosion",
+    "Yeti Ice Shoe Slide",
+    "Ice Knuckles"
+   ],
+   "soulgem": "Yeti-Cooling Factor",
+   "paths": [
+    "Blizzard Brawler",
+    "Glacier Hit"
+   ],
+   "path1": [
+    "Brawler Combos",
+    "Ice Mace",
+    "Blizzard Battle Armor"
+   ],
+   "path2": [
+    "Deep Chill Ice Coffin",
+    "Glacier Tactics",
+    "Work of Ice Art"
+   ],
+   "wowpow": "Sleigh Me"
+  },
+  "16": {
+   "page": "Spyro",
+   "basic": [
+    "Long Range Raze",
+    "Spyro's Flight",
+    "Sprint Charge",
+    "Triple Flameballs"
+   ],
+   "soulgem": "Spyro's Earth Pound",
+   "paths": [
+    "Sheep Burner Spyro",
+    "Blitz Spyro"
+   ],
+   "path1": [
+    "Fire Shield",
+    "Exploding Fireblast",
+    "The Daybringer Flame"
+   ],
+   "path2": [
+    "Stun Charge",
+    "Comet Dash",
+    "Ibex's Wrath Charge"
+   ],
+   "wowpow": "Fireslam!"
+  },
+  "17": {
+   "page": "Voodood",
+   "basic": [
+    "Magical Tripwire Bomb",
+    "Weighted Axe",
+    "Tripwire Reserves",
+    "Extended Blade"
+   ],
+   "soulgem": "Impervious Tripwire",
+   "paths": [
+    "Elementalist",
+    "Marauder"
+   ],
+   "path1": [
+    "Roadblock Tripwire",
+    "Electric Feedback",
+    "Electro Axe"
+   ],
+   "path2": [
+    "Shaman Style",
+    "Legendary Blade",
+    "Hyperwire"
+   ],
+   "wowpow": ""
+  },
+  "18": {
+   "page": "Double Trouble",
+   "basic": [
+    "Arcane Eldritch Beam",
+    "Conjure Unstable Double",
+    "Summon Magic Bomb",
+    "Advanced Construct Techniques"
+   ],
+   "soulgem": "Waterwalker",
+   "paths": [
+    "Channeler",
+    "Conjuror"
+   ],
+   "path1": [
+    "Extended Eldritch Beam",
+    "Magical Cataclysm",
+    "Magic Armageddon"
+   ],
+   "path2": [
+    "Imbue Construct",
+    "Rocket Powered Doubles",
+    "Spirit Construct"
+   ],
+   "wowpow": "Triple Trouble!"
+  },
+  "19": {
+   "page": "Trigger Happy",
+   "basic": [
+    "Golden Super Charge",
+    "Pot O' Gold",
+    "Golden Mega Charge",
+    "Golden Machine Gun"
+   ],
+   "soulgem": "Infinite Ammo",
+   "paths": [
+    "Golden Frenzy",
+    "Golden Money Bags"
+   ],
+   "path1": [
+    "Happiness Is A Golden Gun",
+    "Bouncing Bullets",
+    "Golden Yamato Blast"
+   ],
+   "path2": [
+    "Just Throwing Money Away",
+    "Coinsplosion",
+    "Heads or Tails"
+   ],
+   "wowpow": "Megablast"
+  },
+  "20": {
+   "page": "Drobot",
+   "basic": [
+    "Thruster Flight",
+    "Galvanized Bladegears",
+    "Axon Focus Crystals",
+    "Hover Mode"
+   ],
+   "soulgem": "Afterburners",
+   "paths": [
+    "Master Blaster",
+    "Clockwork Dragon"
+   ],
+   "path1": [
+    "Dendrite Focus Crystals",
+    "Antimatter Charges",
+    "Quadratic Blasters"
+   ],
+   "path2": [
+    "Depleted Uranium Bladegears",
+    "Explosive Bladegears",
+    "Tri-Spread Bladegears"
+   ],
+   "wowpow": "Supreme Bladegear"
+  },
+  "21": {
+   "page": "Drill Sergeant",
+   "basic": [
+    "A Speedy Recovery",
+    "Dozer Endurance",
+    "Power Charge",
+    "Auto-Blaster"
+   ],
+   "soulgem": "Arkeyan Armor",
+   "paths": [
+    "Drill Rocket",
+    "Megadozer"
+   ],
+   "path1": [
+    "A View to Drill",
+    "DX300-Drill Detonator",
+    "MIRV Drill Rockets"
+   ],
+   "path2": [
+    "Speed Dozer Boost",
+    "Hail Storm",
+    "Mega Dozer"
+   ],
+   "wowpow": "Futurecannon"
+  },
+  "22": {
+   "page": "Boomer",
+   "basic": [
+    "Dynamite Fuse Fake-Out",
+    "Bash Smash",
+    "Troll Bomb",
+    "Triple Bundle Dynamite"
+   ],
+   "soulgem": "Troll Bomb Boot",
+   "paths": [
+    "Demolition Troll",
+    "Clobber Troll"
+   ],
+   "path1": [
+    "Bomblastic",
+    "Troll Bombs Away",
+    "An Accident Waiting to Happen"
+   ],
+   "path2": [
+    "Havoc Smash",
+    "Stupification",
+    "Megaton Charged Super Smash"
+   ],
+   "wowpow": ""
+  },
+  "23": {
+   "page": "Wrecking Ball",
+   "basic": [
+    "Magic Ball Control",
+    "Power Belch",
+    "Tongue Evolution",
+    "Digestive Detonation"
+   ],
+   "soulgem": "Enemy Slurp",
+   "paths": [
+    "Total Tongue",
+    "Ultimate Spinner"
+   ],
+   "path1": [
+    "Lightning Tongue",
+    "Tongue Grabber",
+    "Tongue Supermax"
+   ],
+   "path2": [
+    "Forcefield Blast",
+    "Swath of Terror",
+    "It's Gotta Go Somewhere"
+   ],
+   "wowpow": "Disco Ball"
+  },
+  "24": {
+   "page": "Camo",
+   "basic": [
+    "Searing Sun Blast",
+    "Melon Fountain",
+    "Firecracker Food",
+    "Vigorous Vines"
+   ],
+   "soulgem": "Orbiting Sun Shield",
+   "paths": [
+    "Vine Virtuoso",
+    "Melon Master"
+   ],
+   "path1": [
+    "Martial Bounty",
+    "Peppers of Potency",
+    "Proliferation"
+   ],
+   "path2": [
+    "Ring of Might",
+    "Melon GMO",
+    "Melon Fortress"
+   ],
+   "wowpow": "Explosive Harvest"
+  },
+  "25": {
+   "page": "Zook",
+   "basic": [
+    "Hardwood Shells",
+    "Fungal Bloom",
+    "Mortar Attack",
+    "Full Splinter Jacket"
+   ],
+   "soulgem": "MIRV Mortar",
+   "paths": [
+    "Artilleryman",
+    "Floral Defender"
+   ],
+   "path1": [
+    "High Velocity Shrapnel",
+    "Old Growth Bazooka",
+    "Exploding Shrapnel"
+   ],
+   "path2": [
+    "Cactus Barrier",
+    "Mortar of Life",
+    "Fightin' Foliage"
+   ],
+   "wowpow": "Target Lock"
+  },
+  "26": {
+   "page": "Stealth Elf",
+   "basic": [
+    "Straw Pook Scarecrow",
+    "Dragonfang Dagger",
+    "Sturdy Scarecrow",
+    "Arboreal Acrobatics"
+   ],
+   "soulgem": "Sylvan Regeneration",
+   "paths": [
+    "Pook Blade Saint",
+    "Forest Ninja"
+   ],
+   "path1": [
+    "Elf Jitsu",
+    "Elven Sunblade",
+    "Shadowsbane Blade Dance"
+   ],
+   "path2": [
+    "Scare-crio Trio",
+    "Scarecrow Booby Trap",
+    "Scarecrow Spin Slicer"
+   ],
+   "wowpow": "Knife Blender"
+  },
+  "27": {
+   "page": "Stump Smash",
+   "basic": [
+    "Petrified Pummel",
+    "Spiny Acorns",
+    "Meganut",
+    "Thornbark"
+   ],
+   "soulgem": "Waterlogged",
+   "paths": [
+    "Smash 'N' Bash",
+    "Nut Crafter"
+   ],
+   "path1": [
+    "Stump Crusher Combos",
+    "Acorn Croquet",
+    "Smash Meganut"
+   ],
+   "path2": [
+    "Pollen Plume",
+    "Meganut Propagation",
+    "Double Nut"
+   ],
+   "wowpow": "Auto-Nuts"
+  },
+  "28": {
+   "page": "Spyro",
+   "basic": [
+    "Long Range Raze",
+    "Spyro's Flight",
+    "Sprint Charge",
+    "Triple Flameballs"
+   ],
+   "soulgem": "Spyro's Earth Pound",
+   "paths": [
+    "Sheep Burner Spyro",
+    "Blitz Spyro"
+   ],
+   "path1": [
+    "Fire Shield",
+    "Exploding Fireblast",
+    "The Daybringer Flame"
+   ],
+   "path2": [
+    "Stun Charge",
+    "Comet Dash",
+    "Ibex's Wrath Charge"
+   ],
+   "wowpow": "Fireslam!"
+  },
+  "29": {
+   "page": "Hex",
+   "basic": [
+    "Wall of Bones",
+    "Storm of Skulls",
+    "Bone Fortress",
+    "Twice the Orbage"
+   ],
+   "soulgem": "Skull Shield",
+   "paths": [
+    "Shade Master",
+    "Bone Crafter"
+   ],
+   "path1": [
+    "Long Distance Orbs",
+    "Caustic Phantom Orbs",
+    "Unstable Phantom Orbs"
+   ],
+   "path2": [
+    "Compound Fracture",
+    "Master Caster",
+    "Troll Skulls"
+   ],
+   "wowpow": "Skull Buddy"
+  },
+  "30": {
+   "page": "Chop Chop",
+   "basic": [
+    "Spiked Shield Bash",
+    "Vampiric Aura",
+    "Shield Spartan",
+    "Bone Brambler"
+   ],
+   "soulgem": "Cursed Bone Brambler",
+   "paths": [
+    "Vampiric Warrior",
+    "Undead Defender"
+   ],
+   "path1": [
+    "Arkeyan Combat Master",
+    "Arkeyan Vorpal Blade",
+    "Demon Blade of the Underworld"
+   ],
+   "path2": [
+    "Arkeyan Spectral Shield",
+    "Shield Stun Bash",
+    "Demon Shield of the Shadows"
+   ],
+   "wowpow": "Shield Skewer"
+  },
+  "31": {
+   "page": "Ghost Roaster",
+   "basic": [
+    "Pain Chain",
+    "Metalhead",
+    "Ectoplasm Mode",
+    "Haunt"
+   ],
+   "soulgem": "Lingering Curse",
+   "paths": [
+    "Fear Eater",
+    "Skull Master"
+   ],
+   "path1": [
+    "Phase Shift Burst",
+    "Ecto-Friendly",
+    "Nightmare Touch"
+   ],
+   "path2": [
+    "Fright Bite",
+    "Unfinished Business",
+    "Life Transfer"
+   ],
+   "wowpow": ""
+  },
+  "32": {
+   "page": "Cynder",
+   "basic": [
+    "Cynder Flight",
+    "Black Lightning",
+    "Double Spooky!",
+    "Shadow Reach"
+   ],
+   "soulgem": "Haunted Ally",
+   "paths": [
+    "Nether Wielder",
+    "Shadowdancer"
+   ],
+   "path1": [
+    "Unstable Forces",
+    "Breath Control",
+    "Breath of Power"
+   ],
+   "path2": [
+    "Death Bound",
+    "Ghost Haunter",
+    "Shadow Strike"
+   ],
+   "wowpow": "Lightning Rain"
+  },
+  "100": {
+   "page": "Jet-Vac",
+   "basic": [
+    "Fiester Fan",
+    "Jet-Vac Jet Pack",
+    "Vac Blaster 9000",
+    "Turbine Suction Fan"
+   ],
+   "soulgem": "Eagle-Air Battle Gear",
+   "paths": [
+    "Bird Blaster",
+    "Vac-Packeteer"
+   ],
+   "path1": [
+    "Piercing Winds",
+    "Vac Master-Blaster 20X",
+    "Super Suction Air Blaster"
+   ],
+   "path2": [
+    "Tank Reserves",
+    "The Mulcher",
+    "Flying Corkscrew"
+   ],
+   "wowpow": "Shoot the Breeze!"
+  },
+  "101": {
+   "page": "Swarm",
+   "basic": [
+    "Sharpened Barbs",
+    "Wingin' It",
+    "Swarm Form",
+    "Stinger Shot"
+   ],
+   "soulgem": "Bee is for the Butt Stinger",
+   "paths": [
+    "Barberous Avenger",
+    "Wasp Stormer"
+   ],
+   "path1": [
+    "Razor Wings",
+    "Better Barb Blast",
+    "Ultimate Barbs"
+   ],
+   "path2": [
+    "Swarm Storm",
+    "Insectsplosion",
+    "Bee Cleaver"
+   ],
+   "wowpow": ""
+  },
+  "102": {
+   "page": "Crusher",
+   "basic": [
+    "Ground Grinder",
+    "Rockslide",
+    "Super Crusher",
+    "Cavelight Blast"
+   ],
+   "soulgem": "Rockslidin' Out",
+   "paths": [
+    "Rock Grinder",
+    "Rubble Master"
+   ],
+   "path1": [
+    "Crusher Combos",
+    "Hammer Daddy",
+    "Triple Ground Grinder"
+   ],
+   "path2": [
+    "Controlled Rockslide",
+    "Boulder Bombs",
+    "Bedrock Armor"
+   ],
+   "wowpow": "None"
+  },
+  "103": {
+   "page": "Flashwing",
+   "basic": [
+    "Surrounded By Shards",
+    "Luminous Lasers",
+    "Light Speed Lasers",
+    "Armored Aura"
+   ],
+   "soulgem": "Crystal Lighthouse",
+   "paths": [
+    "Super Shards",
+    "Super Spinner"
+   ],
+   "path1": [
+    "Shooting Shards",
+    "Crystal Craziness",
+    "Healing Crystals"
+   ],
+   "path2": [
+    "Extra Radiant Rotation",
+    "Reflection Deflection",
+    "Light, Crystal, Action!"
+   ],
+   "wowpow": "None"
+  },
+  "104": {
+   "page": "Hot Head",
+   "basic": [
+    "Premium Grade|basicupgrade1desc = Oil Blobs and ignited Oil Blobs do increased damage.",
+    "Sizzle Shower",
+    "Turn Up The Heat!",
+    "Extended Forecast"
+   ],
+   "soulgem": "Hot Rod",
+   "paths": [
+    "The Burninator",
+    "Oil Baron"
+   ],
+   "path1": [
+    "Eternal Flame",
+    "Hot Oil Treatment",
+    "Fossil Fuel"
+   ],
+   "path2": [
+    "",
+    "Oil And Fire",
+    "Hot With A Chance of Meteors"
+   ],
+   "wowpow": ""
+  },
+  "105": {
+   "page": "Hot Dog",
+   "basic": [
+    "Pyro Piercers",
+    "Comet Slam",
+    "Wall of MORE Fire",
+    "Super Comet"
+   ],
+   "soulgem": "Ding Dong Ditch",
+   "paths": [
+    "Burning Bow-Wow",
+    "Pyro Pooch"
+   ],
+   "path1": [
+    "Hot Dog Combos",
+    "Bark Bombs",
+    "Pyro Pinwheel"
+   ],
+   "path2": [
+    "Blazing Wildfire",
+    "Great Walls of Fire",
+    "Magmutt Battalion"
+   ],
+   "wowpow": "Bees! Bees! Bees!"
+  },
+  "106": {
+   "page": "Chill",
+   "basic": [
+    "The Great Wall",
+    "Glacial Bash",
+    "Imperial Armor",
+    "Cold Front"
+   ],
+   "soulgem": "Call The Narwhal!",
+   "paths": [
+    "Ice Lancer",
+    "Frozen Fury"
+   ],
+   "path1": [
+    "Brrrr Blade",
+    "Shatterspear",
+    "Triple Javelins"
+   ],
+   "path2": [
+    "Ice Breaker",
+    "On the Rocks",
+    "Better Bash"
+   ],
+   "wowpow": "Orcastration!"
+  },
+  "107": {
+   "page": "Thumpback",
+   "basic": [
+    "A Whale Of A Chomp",
+    "Slippery Belly",
+    "The Whalest Chomp",
+    "Now There's An Anchor!"
+   ],
+   "soulgem": "Blowhard",
+   "paths": [
+    "Anchor's A-Yay!!",
+    "Up Close And Personal"
+   ],
+   "path1": [
+    "Thumpback Combos",
+    "Bermuda Triangle",
+    "Ultimate Anchor"
+   ],
+   "path2": [
+    "Breakfast in Bed",
+    "Armor Of The Sea",
+    "Bad Sushi"
+   ],
+   "wowpow": ""
+  },
+  "108": {
+   "page": "Pop Fizz",
+   "basic": [
+    "New Concoctions",
+    "Puddle of Pain",
+    "Raging Beast",
+    "Dexterous Delivery"
+   ],
+   "soulgem": "Shake It!",
+   "paths": [
+    "Best of the Beast!",
+    "Mad Scientist"
+   ],
+   "path1": [
+    "More Beast!",
+    "Berserker Boost",
+    "Mutant Beast"
+   ],
+   "path2": [
+    "Master Chemist",
+    "Mixologist",
+    "All in"
+   ],
+   "wowpow": "Beaker Buddy"
+  },
+  "109": {
+   "page": "Ninjini",
+   "basic": [
+    "Surrealistic Spheres",
+    "Abra-Ca-STAB-Bra",
+    "Juggling Act",
+    "Bottle Rockets"
+   ],
+   "soulgem": "Dazzling Enchantment",
+   "paths": [
+    "Swords of Might",
+    "Ancient Djinn Magic"
+   ],
+   "path1": [
+    "Wishblade Combos",
+    "Wishbladesplosion",
+    "Ultimate Wishblade"
+   ],
+   "path2": [
+    "Super Surrealistic Spheres",
+    "Ultimate Bottle Rockets",
+    "Buy a Better Bottle"
+   ],
+   "wowpow": "None"
+  },
+  "110": {
+   "page": "Bouncer",
+   "basic": [
+    "I-Beam",
+    "Targeting Computer",
+    "Machine Fingerguns",
+    "Cooler I-Beam"
+   ],
+   "soulgem": "Fists of Destruction",
+   "paths": [
+    "Robot Rocketeer",
+    "I-Beam Supreme"
+   ],
+   "path1": [
+    "Double Targets",
+    "Rockets on Demand",
+    "Atomic Clouds"
+   ],
+   "path2": [
+    "Super Machine Fingerguns",
+    "Professionally Cool I-Beam",
+    "Laser Mines"
+   ],
+   "wowpow": ""
+  },
+  "111": {
+   "page": "Sprocket",
+   "basic": [
+    "Auto Turret V2",
+    "Bouncing Betty Mines",
+    "2 Times The Turrets",
+    "Tanks A Lot!"
+   ],
+   "soulgem": "Landmine Golf",
+   "paths": [
+    "Operator",
+    "Gearhead"
+   ],
+   "path1": [
+    "Sprocket Combos",
+    "Monkey Wrench",
+    "All Mines"
+   ],
+   "path2": [
+    "Mine Drop!",
+    "Exploding Shells",
+    "Self Destruct System"
+   ],
+   "wowpow": "Tanks for the New Toy"
+  },
+  "112": {
+   "page": "Tree Rex",
+   "basic": [
+    "Big Thorn Shockwave Slam",
+    "Photosynthesis Cannon",
+    "Super Stampede",
+    "Treefolk Tripleshot"
+   ],
+   "soulgem": "Woodpecker Pal",
+   "paths": [
+    "Treefolk Charger",
+    "Lumbering Laserer"
+   ],
+   "path1": [
+    "Titanic Elbow Drop",
+    "Lightfooted",
+    "Ultimate Stampede"
+   ],
+   "path2": [
+    "Super-Charged Vaporizer",
+    "Sun Skewer",
+    "The Pod Maker"
+   ],
+   "wowpow": ""
+  },
+  "113": {
+   "page": "Shroomboom",
+   "basic": [
+    "Launch Paratroopers",
+    "Super Shrooms",
+    "Bigger Boomshrooms",
+    "Bouncing Boomshrooms"
+   ],
+   "soulgem": "Self-Slingshot",
+   "paths": [
+    "Barrier Boost",
+    "Paramushroom Promotion"
+   ],
+   "path1": [
+    "Spore Power",
+    "Ultimate Ring",
+    "Back to the Beginning"
+   ],
+   "path2": [
+    "Lock 'N' Load",
+    "Fungal Infestation",
+    "Paratrooper Invasion"
+   ],
+   "wowpow": "High Spore"
+  },
+  "114": {
+   "page": "Eye-Brawl",
+   "basic": [
+    "An Eye In Team",
+    "Awesome Occu-Blast",
+    "The Pummeler",
+    "Headless, Not Helpless"
+   ],
+   "soulgem": "You'll Shoot Your Eye Out",
+   "paths": [
+    "Eye Brawler",
+    "Eye For An Eye"
+   ],
+   "path1": [
+    "Eye-Brawl Combos",
+    "Ultimate Pummeler",
+    "Beats An Eye Patch"
+   ],
+   "path2": [
+    "Asserting Independence",
+    "Eye-Crawlers",
+    "Bouncy Bouncy!"
+   ],
+   "wowpow": ""
+  },
+  "115": {
+   "page": "Fright Rider",
+   "basic": [
+    "Ghoul Glaive",
+    "Burrow Bomber",
+    "Phantasm  Strike",
+    "Halberd of Horror"
+   ],
+   "soulgem": "A Real Drag",
+   "paths": [
+    "Sir Lance A Lot",
+    "Joust Jockey"
+   ],
+   "path1": [
+    "Fright Rider Combos",
+    "Flock of Fury",
+    "Supreme Spear"
+   ],
+   "path2": [
+    "Joust Juice",
+    "Entombment Strike",
+    "360 Degrees of Spear"
+   ],
+   "wowpow": ""
+  },
+  "404": {
+   "page": "Bash",
+   "basic": [
+    "Tennis Tail",
+    "Iron Tail",
+    "Summoning: Stone Projection",
+    "Double Roll"
+   ],
+   "soulgem": "Triceratops Honor Guard",
+   "paths": [
+    "Granite Dragon",
+    "Pulver Dragon"
+   ],
+   "path1": [
+    "Mace of Destruction",
+    "Summoning: Stone Uppercut",
+    "Gaia Hammer"
+   ],
+   "path2": [
+    "Pulver Roll",
+    "Earthen Force Roll",
+    "Continental Boulder"
+   ],
+   "wowpow": "Rolling Thunder"
+  },
+  "416": {
+   "page": "Spyro",
+   "basic": [
+    "Long Range Raze",
+    "Spyro's Flight",
+    "Sprint Charge",
+    "Triple Flameballs"
+   ],
+   "soulgem": "Spyro's Earth Pound",
+   "paths": [
+    "Sheep Burner Spyro",
+    "Blitz Spyro"
+   ],
+   "path1": [
+    "Fire Shield",
+    "Exploding Fireblast",
+    "The Daybringer Flame"
+   ],
+   "path2": [
+    "Stun Charge",
+    "Comet Dash",
+    "Ibex's Wrath Charge"
+   ],
+   "wowpow": "Fireslam!"
+  },
+  "419": {
+   "page": "Trigger Happy",
+   "basic": [
+    "Golden Super Charge",
+    "Pot O' Gold",
+    "Golden Mega Charge",
+    "Golden Machine Gun"
+   ],
+   "soulgem": "Infinite Ammo",
+   "paths": [
+    "Golden Frenzy",
+    "Golden Money Bags"
+   ],
+   "path1": [
+    "Happiness Is A Golden Gun",
+    "Bouncing Bullets",
+    "Golden Yamato Blast"
+   ],
+   "path2": [
+    "Just Throwing Money Away",
+    "Coinsplosion",
+    "Heads or Tails"
+   ],
+   "wowpow": "Megablast"
+  },
+  "430": {
+   "page": "Chop Chop",
+   "basic": [
+    "Spiked Shield Bash",
+    "Vampiric Aura",
+    "Shield Spartan",
+    "Bone Brambler"
+   ],
+   "soulgem": "Cursed Bone Brambler",
+   "paths": [
+    "Vampiric Warrior",
+    "Undead Defender"
+   ],
+   "path1": [
+    "Arkeyan Combat Master",
+    "Arkeyan Vorpal Blade",
+    "Demon Blade of the Underworld"
+   ],
+   "path2": [
+    "Arkeyan Spectral Shield",
+    "Shield Stun Bash",
+    "Demon Shield of the Shadows"
+   ],
+   "wowpow": "Shield Skewer"
+  },
+  "450": {
+   "page": "Gusto",
+   "basic": [
+    "The Breath of Life",
+    "Twistin' in the Wind",
+    "Electro-Rang",
+    "Lots of Lungpower"
+   ],
+   "soulgem": "Boomerangs 4 Breakfast",
+   "paths": [
+    "Air Ace",
+    "Dizzy Destroyer"
+   ],
+   "path1": [
+    "BOOM-erang",
+    "Rang Me Like a Hurricane",
+    "Boomerang Buddies"
+   ],
+   "path2": [
+    "Spin Like the Wind",
+    "Shocking Twists",
+    "Lightning Ball"
+   ],
+   "wowpow": ""
+  },
+  "451": {
+   "page": "Thunderbolt",
+   "basic": [
+    "Lightning Clouds",
+    "Hurricane Pain",
+    "More Thunder",
+    "Hurricane Pain Remains"
+   ],
+   "soulgem": "Lightning Rain",
+   "paths": [
+    "Power Conductor",
+    "I of the Storm"
+   ],
+   "path1": [
+    "Direct Current",
+    "Thunder Thrust",
+    "Just Add Lightning"
+   ],
+   "path2": [
+    "Stormier and Stormier",
+    "Charge It Up!",
+    "Exploding Clouds"
+   ],
+   "wowpow": ""
+  },
+  "452": {
+   "page": "Fling Kong",
+   "basic": [
+    "Spiked!",
+    "Cymbal Crash",
+    "Mad Dash",
+    "The Kong Klang"
+   ],
+   "soulgem": "Make It Rain!",
+   "paths": [
+    "Disc Jockey",
+    "Carpet Captain"
+   ],
+   "path1": [
+    "Trick Shot",
+    "Smash Hit",
+    "A Toss-Up"
+   ],
+   "path2": [
+    "Smash 'N' Dash",
+    "Double Whammy",
+    "Shock Treatment"
+   ],
+   "wowpow": "None"
+  },
+  "453": {
+   "page": "Blades",
+   "basic": [
+    "Cyclone Swirl",
+    "Sharpened Wings",
+    "Shard Harder",
+    "Wind At Your Back"
+   ],
+   "soulgem": "Instant Swirl Shards!",
+   "paths": [
+    "Wind Wielder",
+    "Shard Shooter"
+   ],
+   "path1": [
+    "Follow Like The Wind",
+    "Crushing Cyclones",
+    "Shielding Swirl"
+   ],
+   "path2": [
+    "Slice Shards",
+    "Cutting Edge",
+    "Shard Shrapnel"
+   ],
+   "wowpow": ""
+  },
+  "454": {
+   "page": "Wallop",
+   "basic": [
+    "Tantrum Mode",
+    "Hammer Slammer",
+    "When Hammers Collide",
+    "Cutting Edge"
+   ],
+   "soulgem": "Now That's A Hammer!",
+   "paths": [
+    "Tantrum Thrower",
+    "Hammer Handler"
+   ],
+   "path1": [
+    "Instant Tantrum",
+    "Total Meltdown",
+    "Aftershock Wave"
+   ],
+   "path2": [
+    "Better With Shrapnel",
+    "What A Collision!",
+    "Traptanium Splinters"
+   ],
+   "wowpow": ""
+  },
+  "455": {
+   "page": "Head Rush",
+   "basic": [
+    "Mega Stomp",
+    "Yodel",
+    "Stomping On Air",
+    "Charge Control"
+   ],
+   "soulgem": "Horns Aplenty",
+   "paths": [
+    "Lungs of Steel",
+    "Stomp Harder"
+   ],
+   "path1": [
+    "High Note",
+    "Modulate Yodel",
+    "Forget Breaking Glass"
+   ],
+   "path2": [
+    "A Stomp To Remember",
+    "Power Steering",
+    "Omega Stomp"
+   ],
+   "wowpow": ""
+  },
+  "456": {
+   "page": "Fist Bump",
+   "basic": [
+    "Seismic Slide",
+    "Panquake",
+    "Hold the Line",
+    "Don't Bump Fist Bump"
+   ],
+   "soulgem": "Riding the Rails",
+   "paths": [
+    "Rowdy Richter",
+    "Bamboo Bonanza"
+   ],
+   "path1": [
+    "Fault Line in Glass Houses",
+    "Quake 'N' Bake",
+    "A Bolder Boulder"
+   ],
+   "path2": [
+    "Healing Bamboo",
+    "Bamboo Harvest",
+    "Jump For It!"
+   ],
+   "wowpow": ""
+  },
+  "457": {
+   "page": "Rocky Roll",
+   "basic": [
+    "Boulder Barrier",
+    "Rock On",
+    "Bouncy Attack Mode",
+    "MOH Boulders"
+   ],
+   "soulgem": "Boulder Posse",
+   "paths": [
+    "Geological Grandmaster",
+    "Rolling Rumbler"
+   ],
+   "path1": [
+    "Super Spit Ball",
+    "Rock Hardest",
+    "Triple Spit Balls"
+   ],
+   "path2": [
+    "Let's Roll!",
+    "Roll With The Punches",
+    "Rocky Boxing"
+   ],
+   "wowpow": ""
+  },
+  "458": {
+   "page": "Wildfire",
+   "basic": [
+    "Heat Shield",
+    "Extra Chains",
+    "Fire Roar",
+    "Hotter Heat Shield."
+   ],
+   "soulgem": "Lion Form",
+   "paths": [
+    "Shield Slasher",
+    "Chain Champion"
+   ],
+   "path1": [
+    "Burning Bash",
+    "Fire Spin",
+    "Searing Slam"
+   ],
+   "path2": [
+    "Lots of Chains",
+    "Blazing Breath",
+    "No Escape!"
+   ],
+   "wowpow": ""
+  },
+  "459": {
+   "page": "Ka-Boom",
+   "basic": [
+    "Jumpquake",
+    "Mortar Strike",
+    "The Long Ranger",
+    "Cannon Charge"
+   ],
+   "soulgem": "Missile Rain",
+   "paths": [
+    "Cannonball Runner",
+    "Jumping Juggernaut"
+   ],
+   "path1": [
+    "Bouncing Balls",
+    "Super Bouncing Balls",
+    "Triple Shot"
+   ],
+   "path2": [
+    "Fire Fly",
+    "Big Air",
+    "Triple Jump"
+   ],
+   "wowpow": ""
+  },
+  "460": {
+   "page": "Trail Blazer",
+   "basic": [
+    "Burning The Heat",
+    "Stampede!",
+    "Bucking Bronco",
+    "Fuel the Fire"
+   ],
+   "soulgem": "Heat Wave",
+   "paths": [
+    "Equine Excellence",
+    "Fireballer"
+   ],
+   "path1": [
+    "Flaming Forms",
+    "Firewalker",
+    "Triple Fireballs"
+   ],
+   "path2": [
+    "Kick It Up A Notch",
+    "Bouncing Fireballs",
+    "Not His 1st Rodeo"
+   ],
+   "wowpow": ""
+  },
+  "461": {
+   "page": "Torch",
+   "basic": [
+    "Heating Up",
+    "Flaming Hair Whip",
+    "Pyro Pendant",
+    "Blue Flame"
+   ],
+   "soulgem": "The Incinerator",
+   "paths": [
+    "Forged in Flames",
+    "Maid of Metal"
+   ],
+   "path1": [
+    "Scorched Earth Policy",
+    "Hair's Getting Long",
+    "Double Barrel Bellows"
+   ],
+   "path2": [
+    "Extra Hot Shoes",
+    "Fireworks Display",
+    "Hopping Mad Horseshoes"
+   ],
+   "wowpow": ""
+  },
+  "462": {
+   "page": "Snap Shot",
+   "basic": [
+    "Sure Shot Croc",
+    "Torrential Tidepool",
+    "Super Slam",
+    "Amazing Arrow"
+   ],
+   "soulgem": "A Shard Act to Follow",
+   "paths": [
+    "Crackshot Croc",
+    "Tide Turner"
+   ],
+   "path1": [
+    "Arrowsplosion",
+    "Traptanium Flechette",
+    "Hydro Arrow"
+   ],
+   "path2": [
+    "Big Wave Torrent",
+    "Water Trap",
+    "What's Kraken?"
+   ],
+   "wowpow": ""
+  },
+  "463": {
+   "page": "Lob-Star",
+   "basic": [
+    "Lob-Star Roll",
+    "Sharp Shot",
+    "Boiling Over",
+    "Lob-Star Express"
+   ],
+   "soulgem": "Hard Boiled",
+   "paths": [
+    "Shooting Star",
+    "The Boiler"
+   ],
+   "path1": [
+    "Super Stars",
+    "Twice the Star Power",
+    "Star Defense"
+   ],
+   "path2": [
+    "Getting Steamed",
+    "Self E-Steam",
+    "Full Steamed Ahead"
+   ],
+   "wowpow": ""
+  },
+  "464": {
+   "page": "Flip Wreck",
+   "basic": [
+    "Wheel Shield Bash",
+    "Splash Damage",
+    "Super Sea Saw",
+    "Shield Mode"
+   ],
+   "soulgem": "Sea Slammer",
+   "paths": [
+    "Fish Commander",
+    "Sword Specialist"
+   ],
+   "path1": [
+    "Fish?!?",
+    "Homing Fish",
+    "Endless Fish"
+   ],
+   "path2": [
+    "Sword Swells",
+    "Sea Saw Combos",
+    "Blowhole Blaster"
+   ],
+   "wowpow": ""
+  },
+  "465": {
+   "page": "Echo",
+   "basic": [
+    "Sonic Slam",
+    "Pitch Control",
+    "4-Beat",
+    "Subsonic"
+   ],
+   "soulgem": "Call of the Siren",
+   "paths": [
+    "Bubble Up!",
+    "Singalong"
+   ],
+   "path1": [
+    "Bubble Shield",
+    "Power Pop",
+    "Burst My Bubble"
+   ],
+   "path2": [
+    "Ultimate Pitch Control",
+    "Scream Out",
+    "Ultrasound"
+   ],
+   "wowpow": ""
+  },
+  "466": {
+   "page": "Blastermind",
+   "basic": [
+    "Tasty Waves",
+    "Brain Freeze",
+    "Brain Storm",
+    "Down to Earth"
+   ],
+   "soulgem": "Lock Puzzle Psychic",
+   "paths": [
+    "Psychokinetic",
+    "Mentalist"
+   ],
+   "path1": [
+    "Brain Blowout",
+    "Remote Control",
+    "Mind Mash"
+   ],
+   "path2": [
+    "Mind Control",
+    "The More The Merrier",
+    "Mind Blown"
+   ],
+   "wowpow": ""
+  },
+  "467": {
+   "page": "Enigma",
+   "basic": [
+    "Paradox Pound",
+    "Magic Mist",
+    "Cloak and Dagger",
+    "Paradox Power"
+   ],
+   "soulgem": "An Eye For Several Eyes",
+   "paths": [
+    "Chief of Staff",
+    "Invisible Invader"
+   ],
+   "path1": [
+    "Eye Slam Combo",
+    "Cloak Dash Combo",
+    "It's Raining Eyes?"
+   ],
+   "path2": [
+    "Ninja Style",
+    "Mindboggling",
+    "Give Up The Ghost"
+   ],
+   "wowpow": ""
+  },
+  "469": {
+   "page": "Cobra Cadabra",
+   "basic": [
+    "",
+    "Launch Cobra!",
+    "Basket Party",
+    "Pungi Power"
+   ],
+   "soulgem": "Big Basket Bomb",
+   "paths": [
+    "Concerto Cobra",
+    "Master of Baskets"
+   ],
+   "path1": [
+    "Reverb Riff",
+    "Ultimate Flute Rock",
+    "Snake Charmer's Solo"
+   ],
+   "path2": [
+    "Basket Quintet",
+    "Call and Response",
+    "A Tisket, A Tasket"
+   ],
+   "wowpow": ""
+  },
+  "470": {
+   "page": "Jawbreaker",
+   "basic": [
+    "Ragin' Robo Rage",
+    "Spark Shock",
+    "Alternating Current",
+    "Heavy Hands"
+   ],
+   "soulgem": "Hypercharged Haymaker",
+   "paths": [
+    "High Voltage",
+    "Out-RAGE-ous"
+   ],
+   "path1": [
+    "Static Cling",
+    "Hands Off!",
+    "Sparking Interest"
+   ],
+   "path2": [
+    "Jolting Jab",
+    "Defense Firmware Update",
+    "Punch For Power"
+   ],
+   "wowpow": ""
+  },
+  "471": {
+   "page": "Gearshift",
+   "basic": [
+    "Gear Grind",
+    "Gear Saw",
+    "Many Mini-Gears",
+    "Mini-Gear Distribution"
+   ],
+   "soulgem": "Swing Shift",
+   "paths": [
+    "Dual Mode Duelist",
+    "Fragment Mode Freak"
+   ],
+   "path1": [
+    "Spare Parts",
+    "Keep 'Em Spinning",
+    "Geared Up"
+   ],
+   "path2": [
+    "Enhanced Fragmentation",
+    "Kick It into High Gear",
+    "Hardware Overload"
+   ],
+   "wowpow": ""
+  },
+  "472": {
+   "page": "Chopper",
+   "basic": [
+    "Roar!",
+    "Rev'D Up Rockets",
+    "Homing Missiles",
+    "Better Blades"
+   ],
+   "soulgem": "Ultimate Dino Destruction",
+   "paths": [
+    "Roar Like Never Before",
+    "Blaster From the Past"
+   ],
+   "path1": [
+    "Call of the Wild",
+    "R.O.A.R. Missiles",
+    "King of the Jurassic Jungle"
+   ],
+   "path2": [
+    "The Bigger The Boom",
+    "Props to You",
+    "More Missile"
+   ],
+   "wowpow": ""
+  },
+  "473": {
+   "page": "Tread Head",
+   "basic": [
+    "Pedal to the Metal",
+    "Spin Out",
+    "Tread Heavily",
+    "Kick Up Some Dust"
+   ],
+   "soulgem": "Rocket Boost",
+   "paths": [
+    "Drag Racer",
+    "Pavement Peeler"
+   ],
+   "path1": [
+    "Spike a Wheelie",
+    "Go Out With a Bang",
+    "Burning Rubber"
+   ],
+   "path2": [
+    "Eat My Dust",
+    "Spray It, Don't Say It",
+    "Fire Spin"
+   ],
+   "wowpow": ""
+  },
+  "474": {
+   "page": "Bushwhack",
+   "basic": [
+    "Headbash",
+    "Nut Grenade!",
+    "In a Nut Shell",
+    "Thorn Tail"
+   ],
+   "soulgem": "Timber!",
+   "paths": [
+    "Axe Avenger",
+    "Armor Awesomeness"
+   ],
+   "path1": [
+    "An Axe to Grind",
+    "Combo Attacks|path1upgrade3 = Go Nuts!",
+    ""
+   ],
+   "path2": [
+    "Bush's Shack",
+    "Primal Warrior",
+    "Spring Forward"
+   ],
+   "wowpow": ""
+  },
+  "475": {
+   "page": "Tuff Luck",
+   "basic": [
+    "Warblade Stab",
+    "Green Thumb",
+    "Control Your Destiny",
+    "Glave Wave"
+   ],
+   "soulgem": "Garden of Pain",
+   "paths": [
+    "Pouncy Pounce!",
+    "Warblade Whacker"
+   ],
+   "path1": [
+    "Poison Ivy",
+    "Powerful Pounce",
+    "4-Leafed Clover"
+   ],
+   "path2": [
+    "Wave Goodbye",
+    "Lucky Spin",
+    "Wiggin' Warblade"
+   ],
+   "wowpow": ""
+  },
+  "476": {
+   "page": "Food Fight",
+   "basic": [
+    "Extra-Ripe Tomatoes",
+    "Green Thumb",
+    "Zucchini Blast",
+    "Blooms of Bigger Doom"
+   ],
+   "soulgem": "That's How I Roll",
+   "paths": [
+    "Tomatologist",
+    "Bloomer and Boomer"
+   ],
+   "path1": [
+    "Heavy Harvest",
+    "HeirBOOM Tomatoes",
+    "Bad Aftertaste"
+   ],
+   "path2": [
+    "Special Squash",
+    "Zucchini Goo",
+    "'Choke Chain"
+   ],
+   "wowpow": "None"
+  },
+  "477": {
+   "page": "High Five",
+   "basic": [
+    "Poison Cloud",
+    "Fly Slam",
+    "Buzz Charge",
+    "Buzzerker Overdrive"
+   ],
+   "soulgem": "Organic Slam Apples",
+   "paths": [
+    "Pollen Prince",
+    "Speedy Slammer"
+   ],
+   "path1": [
+    "Cloud Control",
+    "Buzz 'Em Up",
+    "Power Clouds"
+   ],
+   "path2": [
+    "Spin Cycle",
+    "Buzz Buzz Buzz",
+    "Slam Apples"
+   ],
+   "wowpow": ""
+  },
+  "478": {
+   "page": "Krypt King",
+   "basic": [
+    "Haunted Sword",
+    "Spectral Slowdown",
+    "The Broader the Broadsword",
+    "Super Swarm"
+   ],
+   "soulgem": "Storm Swords",
+   "paths": [
+    "Lord of the Sword",
+    "Swarm Summoner"
+   ],
+   "path1": [
+    "Enchanted Armor",
+    "The Rich Get Richer",
+    "Combo Attacks"
+   ],
+   "path2": [
+    "Stunning Sting",
+    "Stir up the Swarm",
+    "Parasitic Power"
+   ],
+   "wowpow": ""
+  },
+  "479": {
+   "page": "Short Cut",
+   "basic": [
+    "Cutting Frenzy",
+    "Nether Needle",
+    "No Strings Attached",
+    "Cut Through Worlds"
+   ],
+   "soulgem": "Scissor Stilts",
+   "paths": [
+    "Scary Seamster",
+    "Puppet Master"
+   ],
+   "path1": [
+    "Treacherous Tangle",
+    "Super Snips",
+    "Threadsplosion"
+   ],
+   "path2": [
+    "Go Out with A Bang",
+    "Puppet Population",
+    "Paging Dr. Puppets"
+   ],
+   "wowpow": ""
+  },
+  "480": {
+   "page": "Bat Spin",
+   "basic": [
+    "Healing Bite",
+    "Brawny Bats",
+    "Go Batty!",
+    "A Colony of Bats"
+   ],
+   "soulgem": "Great Balls of Bats!",
+   "paths": [
+    "Pet Purveyor",
+    "Bat Betterment"
+   ],
+   "path1": [
+    "Mr. Dizzy",
+    "Mr. Blocky",
+    "Mr. Bitey"
+   ],
+   "path2": [
+    "Bat-tle Cry",
+    "Ultimate Bat Squad",
+    "Chiropteran Call"
+   ],
+   "wowpow": ""
+  },
+  "481": {
+   "page": "Funny Bone",
+   "basic": [
+    "Bone Paws",
+    "Disc Demon",
+    "Ferocious Fetch",
+    "Bump Up the Blades"
+   ],
+   "soulgem": "Healing Paws",
+   "paths": [
+    "Tail  Wagger",
+    "Bone Zoner"
+   ],
+   "path1": [
+    "Supercharged Saw",
+    "Bone Paw Power",
+    "Head Case"
+   ],
+   "path2": [
+    "Flying Bone Doom",
+    "Ultimate FBD",
+    "Play Catch"
+   ],
+   "wowpow": ""
+  },
+  "482": {
+   "page": "Knight Light",
+   "basic": [
+    "Hallowed Ground",
+    "Light Up",
+    "Lasting Light",
+    "Scharper Scimitar"
+   ],
+   "soulgem": "Brilliant Blade",
+   "paths": [
+    "Scimitar Slasher",
+    "Luminary of Light"
+   ],
+   "path1": [
+    "Ascending Strike",
+    "Speed of Light",
+    "Spinning Slash"
+   ],
+   "path2": [
+    "Radiant Radius",
+    "Illumination Detonation",
+    "Flash Dash"
+   ],
+   "wowpow": ""
+  },
+  "483": {
+   "page": "Spotlight",
+   "basic": [
+    "Bright Eyes",
+    "Heavenly Aura",
+    "The Halo Effect",
+    "Hello Halos"
+   ],
+   "soulgem": "Light Dragons",
+   "paths": [
+    "Visionary",
+    "The Ringer"
+   ],
+   "path1": [
+    "Aura Charge",
+    "Light It Up",
+    "Bling"
+   ],
+   "path2": [
+    "Heavy Halo",
+    "Ring Shot",
+    "Uplifting Experience"
+   ],
+   "wowpow": ""
+  },
+  "484": {
+   "page": "Knight Mare",
+   "basic": [
+    "Gifts Keeps On Giving",
+    "Charged Up Charge",
+    "Battle Horn",
+    "Shadowy Clones"
+   ],
+   "soulgem": "The Shadow Realm",
+   "paths": [
+    "Shadow Summoner",
+    "Flamberge Aficionado"
+   ],
+   "path1": [
+    "More Clones",
+    "It's Win-Win",
+    "Shadowy Sacrifice"
+   ],
+   "path2": [
+    "Shadow Stab",
+    "Flamberge Fragment",
+    "Sword of Darkness"
+   ],
+   "wowpow": ""
+  },
+  "485": {
+   "page": "Blackout",
+   "basic": [
+    "Black Hole",
+    "Darkness Overload",
+    "Shadow Blade",
+    "Take it Black"
+   ],
+   "soulgem": "Supernova Black Hole",
+   "paths": [
+    "Wing Warrior",
+    "Prince of Darkness"
+   ],
+   "path1": [
+    "A Spinning Finish",
+    "Whip It Up",
+    "Warp Speed"
+   ],
+   "path2": [
+    "Dark Energy Clouds",
+    "Under the Cover of Darkness",
+    "Cloud Gravity"
+   ],
+   "wowpow": ""
+  },
+  "601": {
+   "page": "King Pen",
+   "basic": [
+    "Penguin Drill",
+    "Giga Drill",
+    "Ice Charge Lvl 1:Ice Arena",
+    "Frostier Breath"
+   ],
+   "soulgem": "Snowball",
+   "paths": [
+    "Penguin Combos",
+    "Ice Mastery"
+   ],
+   "path1": [
+    "Penguin Combos",
+    "Ice Blade",
+    "Emperor Penguin"
+   ],
+   "path2": [
+    "Ice Trail",
+    "Ice Charge Lvl 2:Blizzard",
+    "Ice Charge Lvl 3:Iceberg"
+   ],
+   "wowpow": ""
+  },
+  "602": {
+   "page": "Tri-Tip",
+   "basic": [
+    "Rock Blast",
+    "Summon Fossil Traps",
+    "Posey Power Swing",
+    "What Goes Up"
+   ],
+   "soulgem": "Never Saw It Coming",
+   "paths": [
+    "Peleolithic Pounder",
+    "Jurassic Justice"
+   ],
+   "path1": [
+    "Mightier Mace",
+    "Fault Zone",
+    "Jurassic Whirled"
+   ],
+   "path2": [
+    "Historic Preservation",
+    "Fossil Forte",
+    "Matador Might"
+   ],
+   "wowpow": ""
+  },
+  "603": {
+   "page": "Chopscotch",
+   "basic": [
+    "Lose Your Head",
+    "Knock It Up",
+    "Sharpened Blade",
+    "Two Heads Are Better"
+   ],
+   "soulgem": "Hopscotch",
+   "paths": [
+    "Heavy Hitter",
+    "Crazy Cutter"
+   ],
+   "path1": [
+    "Jump Attract",
+    "Charge Up Axe",
+    "Headsplosion"
+   ],
+   "path2": [
+    "Axe Frenzy",
+    "Long Trails",
+    "Exploding Trails"
+   ],
+   "wowpow": ""
+  },
+  "604": {
+   "page": "Boom Bloom",
+   "basic": [
+    "Spore Seeds",
+    "Puff of Pollen",
+    "Spore Shower",
+    "Plenty of Plants"
+   ],
+   "soulgem": "Petal to the Mettle",
+   "paths": [
+    "Spore Seed Specialist",
+    "Grow Green!"
+   ],
+   "path1": [
+    "Potent Pollen",
+    "Thorn Thrasher",
+    "In Full Bloom"
+   ],
+   "path2": [
+    "Greener Grasps",
+    "Spikey Situations",
+    "Hungry Herbivore"
+   ],
+   "wowpow": ""
+  },
+  "605": {
+   "page": "Pit Boss",
+   "basic": [
+    "Viper Pits",
+    "Besst for Lasst",
+    "Pit Master",
+    "Slither Away"
+   ],
+   "soulgem": "The Undersnaker",
+   "paths": [
+    "Snake Charmer",
+    "Pit Prowess"
+   ],
+   "path1": [
+    "Superior Slithering",
+    "The More theSnake-ier",
+    "Shedding"
+   ],
+   "path2": [
+    "Restless Reptiles",
+    "Viper Pit Pounce",
+    "Really Restless Reptiles"
+   ],
+   "wowpow": ""
+  },
+  "606": {
+   "page": "Barbella",
+   "basic": [
+    "Cubic Runic Rock",
+    "Unsteady Ground",
+    "Have a Gneiss Day",
+    "Rocks in a Hard Place"
+   ],
+   "soulgem": "Taken for Granite",
+   "paths": [
+    "Seismic Smasher",
+    "Ruler of Rocks"
+   ],
+   "path1": [
+    "Gifts of the Deadlift",
+    "Caving In",
+    "Rocky Roads"
+   ],
+   "path2": [
+    "For the Crater Good",
+    "Rocky Rebound",
+    "Boulder and All the Wiser"
+   ],
+   "wowpow": ""
+  },
+  "607": {
+   "page": "Air Strike",
+   "basic": [
+    "Spinning Bird Fist!",
+    "Storm Front Finish",
+    "We Have Liftoff",
+    "Side of Eggs"
+   ],
+   "soulgem": "Secret Falling Palm Strike!",
+   "paths": [
+    "Primal Elements",
+    "What Goes Up"
+   ],
+   "path1": [
+    "Eye of the Storm",
+    "Gale Force",
+    "One with the Elements"
+   ],
+   "path2": [
+    "Free Range Eggs",
+    "Smooth Landing",
+    "Chance of Showers"
+   ],
+   "wowpow": ""
+  },
+  "608": {
+   "page": "Ember",
+   "basic": [
+    "Immolation",
+    "Lava Impact",
+    "Supernova",
+    "Ultra Supernova"
+   ],
+   "soulgem": "Undying Rage",
+   "paths": [
+    "Samurai Combo Path",
+    "Living Bomb Path"
+   ],
+   "path1": [
+    "Inner Fire",
+    "Fire Dash",
+    "Samurai Combo Finisher"
+   ],
+   "path2": [
+    "greater Living Bomb",
+    "Purifying Flame",
+    "Meteor Shower"
+   ],
+   "wowpow": ""
+  },
+  "609": {
+   "page": "Ambush",
+   "basic": [
+    "Meditative Strike",
+    "Arboreal Upheaval",
+    "Leaf on the Wind",
+    "Mark of the Angry Tree"
+   ],
+   "soulgem": "Nature's Revenge",
+   "paths": [
+    "The Master Splinterer",
+    "Go Go Forest Ranger"
+   ],
+   "path1": [
+    "Pruning the Hedges",
+    "Slam Trunk",
+    "Spinning Bamboo Piledriver"
+   ],
+   "path2": [
+    "Wood Knocks You!",
+    "The Sharing Tree",
+    "A New Leaf on Life"
+   ],
+   "wowpow": ""
+  },
+  "610": {
+   "page": "Dr. Krankcase",
+   "basic": [
+    "Hat Bots",
+    "Splats All Folks",
+    "All Spun Up",
+    "Hat-tacular"
+   ],
+   "soulgem": "Shot Goo the Heart",
+   "paths": [
+    "For the Greater Goo'd",
+    "Builder of Bots"
+   ],
+   "path1": [
+    "Caustic Effect",
+    "Goo'ing Big",
+    "Goo'd Weather"
+   ],
+   "path2": [
+    "Hat Bot Havoc",
+    "Goo Bots",
+    "Goo Wouldn't Believe It!"
+   ],
+   "wowpow": ""
+  },
+  "612": {
+   "page": "Tae Kwon Crow",
+   "basic": [
+    "Ricochet Shot",
+    "Buzzer Beak",
+    "Ignite Shurikens",
+    "Fire Beak"
+   ],
+   "soulgem": "Big Momma",
+   "paths": [
+    "Shuriken Slinger",
+    "Crow-mmando"
+   ],
+   "path1": [
+    "Triple Shurikens",
+    "Shuriken Flurry",
+    "Ground Saws"
+   ],
+   "path2": [
+    "Triple Kicks",
+    "Buzzer Battalion",
+    "Fury Beak"
+   ],
+   "wowpow": ""
+  },
+  "613": {
+   "page": "Golden Queen",
+   "basic": [
+    "Blinded By Gold",
+    "Royal Guard",
+    "Golden Opportunity",
+    "18 to 24 Karats"
+   ],
+   "soulgem": "Royal Treatment",
+   "paths": [
+    "Ancient History",
+    "In My Defense"
+   ],
+   "path1": [
+    "Colossal Scarab",
+    "Worth Its Weight",
+    "Gold Rush"
+   ],
+   "path2": [
+    "Extra Guard",
+    "Shields of Gold",
+    "Compound Interest"
+   ],
+   "wowpow": ""
+  },
+  "614": {
+   "page": "Wolfgang",
+   "basic": [
+    "Song of the Underworld",
+    "Ultrasonic Supercharge",
+    "Now in Stereo",
+    "Power Chord"
+   ],
+   "soulgem": "Rock Concert",
+   "paths": [
+    "Soundmeister",
+    "Crowd Pleaser"
+   ],
+   "path1": [
+    "Lay Some Tracks",
+    "Song Stuck in my Head",
+    "Amp it Up"
+   ],
+   "path2": [
+    "Surround Sound",
+    "Encore",
+    "Grand Finale"
+   ],
+   "wowpow": ""
+  },
+  "616": {
+   "page": "Mysticat",
+   "basic": [
+    "Help Meow-t",
+    "Disappurring Act",
+    "Cat's Familiar",
+    "Pawsome Painter"
+   ],
+   "soulgem": "Konnichi-paw!",
+   "paths": [
+    "Paw-erful Painter",
+    "Meow You See Me..."
+   ],
+   "path1": [
+    "Cat-astrophic Chasers",
+    "Patience is a Fur-tue",
+    "Fur-st Degree Purr-ns"
+   ],
+   "path2": [
+    "The Feline's Mutual",
+    "Keep Your Fur-ends Close",
+    "Not Kitten Around"
+   ],
+   "wowpow": ""
+  },
+  "617": {
+   "page": "Starcast",
+   "basic": [
+    "Shadow Form Decoy",
+    "Extra Dimensional Shurikens",
+    "Dense Dimensional Shuriken",
+    "Get Over Here!"
+   ],
+   "soulgem": "Flying Starcer",
+   "paths": [
+    "Megastart Me Up",
+    "Enhance the Decoy"
+   ],
+   "path1": [
+    "Star Stomp",
+    "Star Leap",
+    "Star Shards"
+   ],
+   "path2": [
+    "Star of the Show",
+    "Dark N' Powerful",
+    "Sharp and to the Point"
+   ],
+   "wowpow": ""
+  },
+  "618": {
+   "page": "Buckshot",
+   "basic": [
+    "Through and Through",
+    "Vortex Boomerang",
+    "Now You See Me",
+    "Speedy Exit"
+   ],
+   "soulgem": "More Bang for Your Buck",
+   "paths": [
+    "Arrows Away!",
+    "Escape Goat!"
+   ],
+   "path1": [
+    "Not the Face!",
+    "Random Selection",
+    "Where'd That Come From?"
+   ],
+   "path2": [
+    "Main Attraction",
+    "Dimensional Damage",
+    "Two for One"
+   ],
+   "wowpow": ""
+  },
+  "619": {
+   "page": "Aurora",
+   "basic": [
+    "Light Burst",
+    "Speed of Light",
+    "Brighter Light",
+    "Extended Reach"
+   ],
+   "soulgem": "Eon's Power",
+   "paths": [
+    "Akimo Master",
+    "Fastest Skylander Alive"
+   ],
+   "path1": [
+    "Sword Techniques",
+    "Rapid Strike Mode",
+    "Dervish"
+   ],
+   "path2": [
+    "Forever Runner",
+    "Momentum",
+    "Explosive Finish"
+   ],
+   "wowpow": ""
+  },
+  "620": {
+   "page": "Flare Wolf",
+   "basic": [
+    "Loop De Loop",
+    "Secret Weapon",
+    "Trip to the Moon",
+    "Firecrackers!"
+   ],
+   "soulgem": "Flare in the Hole!",
+   "paths": [
+    "The Greatest Show in Skylands!",
+    "Fun With Flames"
+   ],
+   "path1": [
+    "Roman Candle",
+    "Sparklers",
+    "Flame and Shine"
+   ],
+   "path2": [
+    "Pyrotechnist",
+    "Ringmaster",
+    "Flame Spinner"
+   ],
+   "wowpow": ""
+  },
+  "621": {
+   "page": "Chompy Mage",
+   "basic": [
+    "Chompy Pile!",
+    "Staff Shot",
+    "A Corn!",
+    "What a Dashing Pile!"
+   ],
+   "soulgem": "Chompies to Go Please",
+   "paths": [
+    "The Champ of Chomp",
+    "Master Puppeteer"
+   ],
+   "path1": [
+    "Bitey Chompies!",
+    "Giant Bitey Chompies!",
+    "Pile Launcher!"
+   ],
+   "path2": [
+    "Get Thee to a Shrubbery!",
+    "Here Lies a Chompy",
+    "Shrubsplode!"
+   ],
+   "wowpow": ""
+  },
+  "625": {
+   "page": "Ro-Bow",
+   "basic": [
+    "Reinforced Arrows",
+    "Deconstruction Laser",
+    "Whirling Destruct-O-Matic V2",
+    "Havoc Orb"
+   ],
+   "soulgem": "Ro-Bow Rampage",
+   "paths": [
+    "Archery Mastery",
+    "Tech Mastery"
+   ],
+   "path1": [
+    "Charged Shot",
+    "Improved Archery",
+    "Archer Combos"
+   ],
+   "path2": [
+    "Enhanced Deconstruction Laser",
+    "Whirling Destruct-O-Matic V3",
+    "Mechanical Obelisk"
+   ],
+   "wowpow": ""
+  },
+  "626": {
+   "page": "Chain Reaction",
+   "basic": [
+    "Running With Chainsaws",
+    "Thunderslam",
+    "Improved Energy Hoarding",
+    "Overload"
+   ],
+   "soulgem": "Lightning God",
+   "paths": [
+    "Lightning Chainsaw Combos",
+    "Manic Inventor"
+   ],
+   "path1": [
+    "Charged Bolt",
+    "Improved Charged Bolt",
+    "Chainsaw Combo Finishers"
+   ],
+   "path2": [
+    "Maximum Energy",
+    "Explosive Work",
+    "Lightning Nova"
+   ],
+   "wowpow": ""
+  },
+  "628": {
+   "page": "Wild Storm",
+   "basic": [
+    "Use Your Head!",
+    "Uproar",
+    "Thunderstorms",
+    "Uproar Galore"
+   ],
+   "soulgem": "Release the Beast",
+   "paths": [
+    "Feral Beast",
+    "Wild Weather"
+   ],
+   "path1": [
+    "Brute Edge",
+    "Untamed Air",
+    "Running Wild"
+   ],
+   "path2": [
+    "Cut Loose",
+    "Chain Lighting",
+    "Electrical Storm"
+   ],
+   "wowpow": ""
+  },
+  "629": {
+   "page": "Tidepool",
+   "basic": [
+    "Whale Tale",
+    "Spin Shot",
+    "Blinding Ink",
+    "Whale Breach"
+   ],
+   "soulgem": "Emergency Shell-met Defense",
+   "paths": [
+    "Aqua Marine Raider",
+    "Sea-cret Forces"
+   ],
+   "path1": [
+    "I'll ink to that",
+    "Inking Big",
+    "Squid Pistol Kata"
+   ],
+   "path2": [
+    "Squid Squabble",
+    "Three's a pod!",
+    "Deep end"
+   ],
+   "wowpow": ""
+  },
+  "630": {
+   "page": "Crash Bandicoot",
+   "basic": [
+    "Crate Goingand Body Slam",
+    "Cyclone Spin Combo",
+    "Five to Life",
+    "Upperkick"
+   ],
+   "soulgem": "Box O' Rockets",
+   "paths": [
+    "Spin to Win",
+    "Crates a Plenty"
+   ],
+   "path1": [
+    "Aku Aku Dash",
+    "Suction Cyclone Spin",
+    "Go Yo-YoGo Yo-Yo Go!"
+   ],
+   "path2": [
+    "Four Squares",
+    "Blasting Impression",
+    "Dynamight"
+   ],
+   "wowpow": ""
+  },
+  "631": {
+   "page": "Dr. Neo Cortex",
+   "basic": [
+    "What's Mine is Yours",
+    "Hoverboard",
+    "Multi-Mine",
+    "Mask Horray-Aid"
+   ],
+   "soulgem": "Wanted: Dead or Up High",
+   "paths": [
+    "Gadgets Galore",
+    "Wonderful Wizardry"
+   ],
+   "path1": [
+    "N. Tropy's Slow Mo Flow",
+    "Insane Bolt",
+    "Blaster Fracture"
+   ],
+   "path2": [
+    "Boo Uka Boo Uka!",
+    "Mask in the Mirror",
+    "You Do That Voodoo"
+   ],
+   "wowpow": ""
+  },
+  "1000": {
+   "page": "Boom Jet",
+   "basic": [
+    "Mach 1",
+    "Ace Pilot",
+    "Turbulence",
+    ""
+   ],
+   "soulgem": "Mach 2",
+   "paths": [
+    "Sky Writer",
+    "Ace Gunner"
+   ],
+   "path1": [
+    "Sky Writing",
+    "Thick Smoke",
+    ""
+   ],
+   "path2": [
+    "Gun Ship",
+    "Rocket Fuel",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1001": {
+   "page": "Free Ranger",
+   "basic": [
+    "Approaching Storm",
+    "Wind Powered",
+    "Tornado Vacuum Boost",
+    ""
+   ],
+   "soulgem": "Charged Winds",
+   "paths": [
+    "Lightning Linguist",
+    "Tornado Thrower"
+   ],
+   "path1": [
+    "Lightning Nova",
+    "Nova Flash",
+    ""
+   ],
+   "path2": [
+    "Wild Tornado",
+    "Twisted Twister",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1002": {
+   "page": "Rubble Rouser",
+   "basic": [
+    "Minor Miners",
+    "Earthy Fortitude",
+    "Tunnel Expedition",
+    ""
+   ],
+   "soulgem": "Pop Rock",
+   "paths": [
+    "Bolder Boulders",
+    "Miner Foreman"
+   ],
+   "path1": [
+    "Boulder Toss",
+    "So Bold",
+    ""
+   ],
+   "path2": [
+    "Miner Craft",
+    "On Strike",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1003": {
+   "page": "Doom Stone",
+   "basic": [
+    "Spin Right Around",
+    "Revolutionary Belt",
+    "Speedy Spinner",
+    ""
+   ],
+   "soulgem": "Spin The Tables",
+   "paths": [
+    "Serious Spinner",
+    "Carved Belt"
+   ],
+   "path1": [
+    "The Harder They Fall",
+    "Spinball King",
+    ""
+   ],
+   "path2": [
+    "Jaded Spin",
+    "Belt Pelters",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1004": {
+   "page": "Blast Zone",
+   "basic": [
+    "Ready For Blast Off",
+    "Armor Plating",
+    "Fuel for the Fire",
+    ""
+   ],
+   "soulgem": "Hot Feet",
+   "paths": [
+    "Fuel Injected",
+    "Temperatures Rising"
+   ],
+   "path1": [
+    "Heat Wave",
+    "Tempered Fire",
+    ""
+   ],
+   "path2": [
+    "Flamed",
+    "Too Hot To Handle",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1005": {
+   "page": "Fire Kraken",
+   "basic": [
+    "Show-Off",
+    "Kraken Up",
+    "The Big One",
+    ""
+   ],
+   "soulgem": "The Bigger One",
+   "paths": [
+    "Stunning Sparkler",
+    "Booming Bouncer"
+   ],
+   "path1": [
+    "Unstable Element",
+    "Sizzling Sparkler",
+    ""
+   ],
+   "path2": [
+    "Bigbadaboom",
+    "Strike the Foes",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1006": {
+   "page": "Stink Bomb",
+   "basic": [
+    "Hidden Tail",
+    "Sporting Stripes",
+    "Skunking Around",
+    ""
+   ],
+   "soulgem": "Stealth Skunk",
+   "paths": [
+    "Skunk Cloud Controller",
+    "Sneaky Tricks"
+   ],
+   "path1": [
+    "Rolling Fog",
+    "Cloudy Concoction",
+    ""
+   ],
+   "path2": [
+    "Sneaky Tactics",
+    "Pain in the Foot",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1007": {
+   "page": "Grilla Drilla",
+   "basic": [
+    "Explosive Growth",
+    "Spreading Like Weeds",
+    "Nature's Bounty",
+    ""
+   ],
+   "soulgem": "Adaptive Nature",
+   "paths": [
+    "Coconut Caretaker",
+    "Banana Blaster"
+   ],
+   "path1": [
+    "This Is Coconuts!",
+    "Coconut Mayhem",
+    ""
+   ],
+   "path2": [
+    "Banana Split",
+    "Go Bananas!",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1008": {
+   "page": "Hoot Loop",
+   "basic": [
+    "Portable Hole",
+    "Temporal Whack",
+    "Time Sink",
+    ""
+   ],
+   "soulgem": "Infinite Loop",
+   "paths": [
+    "Telekinesis",
+    "Escape Artist"
+   ],
+   "path1": [
+    "Now You See Me",
+    "Complete Concentration",
+    ""
+   ],
+   "path2": [
+    "Now You Don't",
+    "Teleport Turbulence",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1009": {
+   "page": "Trap Shadow",
+   "basic": [
+    "Prowl",
+    "Nine Lives",
+    "Out of the Shadows",
+    ""
+   ],
+   "soulgem": "Living Shadow",
+   "paths": [
+    "Shadow Combat",
+    "Prowler"
+   ],
+   "path1": [
+    "Dark Magic",
+    "Black Cat",
+    ""
+   ],
+   "path2": [
+    "Shade Steps",
+    "Bumps in the Night",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1010": {
+   "page": "Magna Charge",
+   "basic": [
+    "Eject",
+    "Rad Wheels",
+    "Drag Capacity",
+    ""
+   ],
+   "soulgem": "Super Repulsor",
+   "paths": [
+    "Static Buildup",
+    "Drag Racer"
+   ],
+   "path1": [
+    "Shock Stop",
+    "Crash Test",
+    ""
+   ],
+   "path2": [
+    "Rapid Repel",
+    "Opposites Repel",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1011": {
+   "page": "Spy Rise",
+   "basic": [
+    "Spyder Mine",
+    "Spyder Mine 002",
+    "Rapid Laser Legs V17",
+    ""
+   ],
+   "soulgem": "Omega Sky Laser",
+   "paths": [
+    "Fire Tech",
+    "Electro Tech"
+   ],
+   "path1": [
+    "Foot-Mounted Flame",
+    "Blue Flame",
+    ""
+   ],
+   "path2": [
+    "Pulse Cannon",
+    "Advanced Pulse Cannon",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1012": {
+   "page": "Night Shift",
+   "basic": [
+    "Float Like a Vampire",
+    "Foggy Movement",
+    "A Batty Coach",
+    ""
+   ],
+   "soulgem": "Grand Entrance",
+   "paths": [
+    "Warping Vortexes",
+    "Underbat"
+   ],
+   "path1": [
+    "Vortex of Doom",
+    "Close to Doom",
+    ""
+   ],
+   "path2": [
+    "Round 2",
+    "Luck of the Underbat",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1013": {
+   "page": "Rattle Shake",
+   "basic": [
+    "Bounce the Bones",
+    "On Brand",
+    "Sssstampede",
+    ""
+   ],
+   "soulgem": "The Snake-Skinned Kid",
+   "paths": [
+    "Bone Herder",
+    "Grave Springer"
+   ],
+   "path1": [
+    "Goliath Bone Snake",
+    "Dances With Snakes",
+    ""
+   ],
+   "path2": [
+    "Spurred Spring",
+    "Graveyard Smash",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1014": {
+   "page": "Freeze Blade",
+   "basic": [
+    "Ice Trail",
+    "Glacial Coat",
+    "Bladed Butterfly",
+    ""
+   ],
+   "soulgem": "Iceberg Endurance",
+   "paths": [
+    "Trail Freezer",
+    "Iced Skater"
+   ],
+   "path1": [
+    "Flash Freeze",
+    "Nice Ice",
+    ""
+   ],
+   "path2": [
+    "Penalty Frost",
+    "Iced Skates",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "1015": {
+   "page": "Wash Buckler",
+   "basic": [
+    "Octolash",
+    "Deep Skin",
+    "Ink Jet",
+    ""
+   ],
+   "soulgem": "Tentacle Carousel",
+   "paths": [
+    "Tentacoolest",
+    "Ink Artist"
+   ],
+   "path1": [
+    "Tentacleaver",
+    "Sea Legs",
+    ""
+   ],
+   "path2": [
+    "Ink Trail",
+    "This Will Never Come Out!",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2000": {
+   "page": "Boom Jet",
+   "basic": [
+    "Air Strike",
+    "Tight Spiral",
+    "Go Long!",
+    ""
+   ],
+   "soulgem": "Supply Drop",
+   "paths": [
+    "Storm Bomber",
+    "Squad Leader"
+   ],
+   "path1": [
+    "Storm Bomb",
+    "Unfriendly Skies",
+    ""
+   ],
+   "path2": [
+    "Bombers",
+    "Tight Formation",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2001": {
+   "page": "Free Ranger",
+   "basic": [
+    "Eyes of the Storm",
+    "Charged Blades",
+    "Gale Slash",
+    ""
+   ],
+   "soulgem": "Storming Stormblades",
+   "paths": [
+    "Wind Slasher",
+    "Storm Focus"
+   ],
+   "path1": [
+    "Slicing Storm",
+    "Feathered Fury",
+    ""
+   ],
+   "path2": [
+    "Lightning Strikes Thrice",
+    "Charged Gigawatt Bolt",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2002": {
+   "page": "Rubble Rouser",
+   "basic": [
+    "Tools of the Trade",
+    "Happy Hammering",
+    "Drill Head",
+    ""
+   ],
+   "soulgem": "Obsidian Skin",
+   "paths": [
+    "Drill Pitcher",
+    "Excavator"
+   ],
+   "path1": [
+    "Nailed it!",
+    "Sledgehammer",
+    ""
+   ],
+   "path2": [
+    "Rock Shards",
+    "Gem Quality",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2003": {
+   "page": "Doom Stone",
+   "basic": [
+    "Living Statue",
+    "Reject and Reflect",
+    "Column Duty",
+    ""
+   ],
+   "soulgem": "Stoney Stare",
+   "paths": [
+    "Column Clubber",
+    "Jaded Fighter"
+   ],
+   "path1": [
+    "Falling to Pieces",
+    "Club Doom",
+    ""
+   ],
+   "path2": [
+    "Cracking Up",
+    "More Doric Warfare",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2004": {
+   "page": "Blast Zone",
+   "basic": [
+    "Flame Breath",
+    "Power Bombs",
+    "Sticky Bomb",
+    ""
+   ],
+   "soulgem": "Bomb Party",
+   "paths": [
+    "Ignition",
+    "Reaction Satisfaction"
+   ],
+   "path1": [
+    "Flaming Bombs",
+    "Fired Up!",
+    ""
+   ],
+   "path2": [
+    "Ring of Fire",
+    "Ring Blast",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2005": {
+   "page": "Fire Kraken",
+   "basic": [
+    "Dragon Parade",
+    "Glow Stick",
+    "Rising Fountain",
+    ""
+   ],
+   "soulgem": "Dance of Dragons",
+   "paths": [
+    "The Showcase",
+    "Magnificent Parade"
+   ],
+   "path1": [
+    "Rising Charge",
+    "Finale",
+    ""
+   ],
+   "path2": [
+    "Year of the Dragon",
+    "Dragon Candles",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2006": {
+   "page": "Stink Bomb",
+   "basic": [
+    "One-Inch Palm",
+    "Noxious Ninja",
+    "Sweeping Skunk Fu",
+    ""
+   ],
+   "soulgem": "Master-Star Technique",
+   "paths": [
+    "The Art of Skunk-Fu",
+    "The Art of Acorns"
+   ],
+   "path1": [
+    "Skunk-Fu Shield",
+    "Skunk-Fu Master",
+    ""
+   ],
+   "path2": [
+    "Acorn Accuracy",
+    "Skunk Eye",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2007": {
+   "page": "Grilla Drilla",
+   "basic": [
+    "Monkey Call",
+    "Silverback",
+    "Reaching Mandrill",
+    ""
+   ],
+   "soulgem": "Rings of the Golden Monkey",
+   "paths": [
+    "Monkey Master",
+    "Drilling Punches"
+   ],
+   "path1": [
+    "Team Monkey",
+    "King of the Jungle",
+    ""
+   ],
+   "path2": [
+    "Double Punch",
+    "Primate Power",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2008": {
+   "page": "Hoot Loop",
+   "basic": [
+    "Hypnotism",
+    "Tricked Ya!",
+    "Flashback",
+    ""
+   ],
+   "soulgem": "Wand of Dreams",
+   "paths": [
+    "Dream-Weaver",
+    "Hypno-Owl"
+   ],
+   "path1": [
+    "Dream Beam",
+    "Bad Dreams Beam",
+    ""
+   ],
+   "path2": [
+    "Mass Hypnosis",
+    "Deep Asleep",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2009": {
+   "page": "Trap Shadow",
+   "basic": [
+    "Snap Trap",
+    "Sharp Magic",
+    "Catch!",
+    ""
+   ],
+   "soulgem": "Shadow Striker",
+   "paths": [
+    "Feral Instincts",
+    "Trap Trickster"
+   ],
+   "path1": [
+    "Me-ouch!",
+    "Nocturnal Predcator",
+    ""
+   ],
+   "path2": [
+    "Gloom and Boom",
+    "Make It Snappy",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2010": {
+   "page": "Magna Charge",
+   "basic": [
+    "Polarized Pickup",
+    "Plasma Shots",
+    "Magnetic Buildup",
+    ""
+   ],
+   "soulgem": "Multi Barrelled",
+   "paths": [
+    "Magnetic Armaments",
+    "Magnet Tuner"
+   ],
+   "path1": [
+    "Discharge Recharge",
+    "Heavy Blaster",
+    ""
+   ],
+   "path2": [
+    "Burst Pickup",
+    "Magnetic Personality",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2011": {
+   "page": "Spy Rise",
+   "basic": [
+    "Spyder Scanner S3",
+    "Spyder Sting",
+    "Future Tech",
+    ""
+   ],
+   "soulgem": "Spy with a Golden Hand",
+   "paths": [
+    "Web Spinner",
+    "Shock Spy"
+   ],
+   "path1": [
+    "Cocoon Spinner",
+    "Experimental Webs",
+    ""
+   ],
+   "path2": [
+    "Electroweb Pulse Bomb",
+    "Improved EPB",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2012": {
+   "page": "Night Shift",
+   "basic": [
+    "Vampire’s Bite",
+    "Sting Like a Bat",
+    "Don’t Move, Just Stick!",
+    ""
+   ],
+   "soulgem": "Gentlemanly",
+   "paths": [
+    "Proper Vampire",
+    "Prize Fighter"
+   ],
+   "path1": [
+    "Infectious Smile",
+    "Healthy Appetite",
+    ""
+   ],
+   "path2": [
+    "Prize Fighter",
+    "Pay Day",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2013": {
+   "page": "Rattle Shake",
+   "basic": [
+    "Deputy Snake",
+    "Fistful of Snakes",
+    "Spring Loaded Snake",
+    ""
+   ],
+   "soulgem": "Raise the Snakes",
+   "paths": [
+    "Deputy's Duty",
+    "Coiled Ammunition"
+   ],
+   "path1": [
+    "Nasty Sssurprise",
+    "Armed to the Fangs",
+    ""
+   ],
+   "path2": [
+    "Snake Bite",
+    "This Bites",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2014": {
+   "page": "Freeze Blade",
+   "basic": [
+    "Frostcicle",
+    "Icicles",
+    "Frigid Whirl",
+    ""
+   ],
+   "soulgem": "Winter Chakram",
+   "paths": [
+    "Blizzard Blade",
+    "Ice Sculptor"
+   ],
+   "path1": [
+    "Shaved Ice",
+    "Whiteout",
+    ""
+   ],
+   "path2": [
+    "Oh Snow!",
+    "Ice To Meet You",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "2015": {
+   "page": "Wash Buckler",
+   "basic": [
+    "Bubble Blaster",
+    "Bladesail",
+    "Dangerous Waters",
+    ""
+   ],
+   "soulgem": "On Stormy Seas",
+   "paths": [
+    "Cutlass Captain",
+    "Bubble Buccaneer"
+   ],
+   "path1": [
+    "Parley Popper",
+    "First Mate Cutlass",
+    ""
+   ],
+   "path2": [
+    "Marooned",
+    "Captain of Piranha Bay",
+    ""
+   ],
+   "wowpow": ""
+  },
+  "3000": {
+   "page": "Scratch",
+   "basic": [
+    "Wing Spark",
+    "Silver Claws",
+    "Whirlwing",
+    "Silver Mask"
+   ],
+   "soulgem": "Gem Affinity",
+   "paths": [
+    "Ruby",
+    "Sapphire"
+   ],
+   "path1": [
+    "Sharpened Rubies",
+    "Ruby Rage",
+    "Ruby Mask"
+   ],
+   "path2": [
+    "Speedy Sapphire",
+    "Sapphire Slash",
+    "Sapphire Mask"
+   ],
+   "wowpow": ""
+  },
+  "3001": {
+   "page": "Pop Thorn",
+   "basic": [
+    "Fresh Breath",
+    "Puffball Pound",
+    "Polished Spikes",
+    "Wind Trap"
+   ],
+   "soulgem": "To Puff or Not to Puff",
+   "paths": [
+    "Tough and Puffed",
+    "Controlled Breather"
+   ],
+   "path1": [
+    "Rollerpuff",
+    "Bounceback",
+    "Prickly Body"
+   ],
+   "path2": [
+    "Aero Trampoline",
+    "Deep Breath",
+    "Scattered Winds"
+   ],
+   "wowpow": ""
+  },
+  "3002": {
+   "page": "Slobber Tooth",
+   "basic": [
+    "Unstoppable Force",
+    "Tough Hide",
+    "Shockwave",
+    "Loogey"
+   ],
+   "soulgem": "Iron Jaw",
+   "paths": [
+    "Food Fighter",
+    "Seismic Tail"
+   ],
+   "path1": [
+    "Snot Rocket",
+    "Om Nom Nom",
+    "Feast"
+   ],
+   "path2": [
+    "Fling",
+    "Weight Gain",
+    "Earth Shaker"
+   ],
+   "wowpow": ""
+  },
+  "3003": {
+   "page": "Scorp",
+   "basic": [
+    "Shoulder Roll",
+    "Chrome Carapace",
+    "Crystal Ball",
+    "Earthly Power"
+   ],
+   "soulgem": "Avalanche Dash",
+   "paths": [
+    "Stinger",
+    "Crystal Venomancer"
+   ],
+   "path1": [
+    "Fuming Fissure",
+    "Scorpion Strike",
+    "Potent Poisons"
+   ],
+   "path2": [
+    "Cracked Crystal",
+    "Crystal Shards",
+    "Venomous Crystals"
+   ],
+   "wowpow": ""
+  },
+  "3004": {
+   "page": "Fryno",
+   "basic": [
+    "The Horn And The Hog",
+    "Built Tough",
+    "Fired Up!",
+    "Molten Fury"
+   ],
+   "soulgem": "Madness Maxed",
+   "paths": [
+    "Brawler",
+    "Fryno's Hot Shop"
+   ],
+   "path1": [
+    "Hot Hands",
+    "Spiked Up",
+    "Temperature Tantrum"
+   ],
+   "path2": [
+    "Born To Ride",
+    "Hot Rod",
+    "Crash And Burn"
+   ],
+   "wowpow": "Burning Rubber"
+  },
+  "3005": {
+   "page": "Smolderdash",
+   "basic": [
+    "Eclipse",
+    "Solar Powered",
+    "Sunrise",
+    "Whip It!"
+   ],
+   "soulgem": "Smolder Dash",
+   "paths": [
+    "Sun Forger",
+    "Sun Forged"
+   ],
+   "path1": [
+    "Super Giant",
+    "Solar Flare",
+    "Sun Splitter"
+   ],
+   "path2": [
+    "Solar Blast",
+    "Sunny Armor",
+    "Sun's Core"
+   ],
+   "wowpow": ""
+  },
+  "3006": {
+   "page": "Bumble Blast",
+   "basic": [
+    "Honey Beecon",
+    "Hungry Bees",
+    "Hive Mine",
+    "Painful Stings"
+   ],
+   "soulgem": "Bee-Pack Backpack",
+   "paths": [
+    "Bee Keeper",
+    "Honey Tree"
+   ],
+   "path1": [
+    "Bee Armada",
+    "Stirred up a Nest",
+    "Queen Bee"
+   ],
+   "path2": [
+    "Honey Buzz Blast",
+    "Heavy Honey",
+    "Honeycomb Bark"
+   ],
+   "wowpow": ""
+  },
+  "3007": {
+   "page": "Zoo Lou",
+   "basic": [
+    "Piggyback Ride",
+    "Raging Boar",
+    "Swoop Re-loop",
+    "Better Beaks"
+   ],
+   "soulgem": "Birds of Prey",
+   "paths": [
+    "The Bucking Boar",
+    "The Wild Wolf"
+   ],
+   "path1": [
+    "Rough Rider",
+    "Thicker Pigskin",
+    "Hog Wild"
+   ],
+   "path2": [
+    "Alpha Wolf",
+    "Hunger of the Wolf",
+    "Hunter and Gatherer"
+   ],
+   "wowpow": ""
+  },
+  "3008": {
+   "page": "Dune Bug",
+   "basic": [
+    "Dune Parade",
+    "Debilitating Dunes",
+    "Bursting Magic",
+    "Buzzing Beetle"
+   ],
+   "soulgem": "Buggy Buddy",
+   "paths": [
+    "Scarab Sage Path",
+    "Dune Mage Path"
+   ],
+   "path1": [
+    "Stunning Spread",
+    "Scarab Power",
+    "Magic Scarab Ride"
+   ],
+   "path2": [
+    "Dune Bomb",
+    "Hardened Shell",
+    "Sparking Wings"
+   ],
+   "wowpow": ""
+  },
+  "3009": {
+   "page": "Star Strike",
+   "basic": [
+    "Starfall",
+    "Star-Filled Sky",
+    "Your Biggest Fan",
+    "Star Power"
+   ],
+   "soulgem": "Shooting Stars",
+   "paths": [
+    "Star Gazer",
+    "Cosmic Reflector"
+   ],
+   "path1": [
+    "Star Light",
+    "Star Struck",
+    "Star Bright"
+   ],
+   "path2": [
+    "Atom Splitter",
+    "Star Evasion",
+    "Super Star"
+   ],
+   "wowpow": "None"
+  },
+  "3010": {
+   "page": "Countdown",
+   "basic": [
+    "Controlled Burst",
+    "Roaring Rockets",
+    "Explosive Friendship",
+    "Hefty Concussion"
+   ],
+   "soulgem": "Self-Destruct",
+   "paths": [
+    "Bomb Buddies Forever",
+    "Rocketeer"
+   ],
+   "path1": [
+    "Boom Buddies",
+    "Bombing Blitzers",
+    "Lingering Sparks"
+   ],
+   "path2": [
+    "Triple Threat",
+    "Warhead Hands",
+    "Mega Mortar"
+   ],
+   "wowpow": ""
+  },
+  "3012": {
+   "page": "Roller Brawl",
+   "basic": [
+    "Skateblades",
+    "Impact Skater",
+    "Deadly Clothesline",
+    "Aggression"
+   ],
+   "soulgem": "Cursed Helmet",
+   "paths": [
+    "Shadow Skater",
+    "Skateblade Siren"
+   ],
+   "path1": [
+    "Pirouette",
+    "Hardened Helm",
+    "Bullrush"
+   ],
+   "path2": [
+    "Skateblade Trap",
+    "Critical Claws",
+    "Spinning Saws"
+   ],
+   "wowpow": ""
+  },
+  "3013": {
+   "page": "Grim Creeper",
+   "basic": [
+    "Poltergeist Scythe",
+    "Spirit Scythe",
+    "Spook and Destroy",
+    "Armored Amore"
+   ],
+   "soulgem": "Help From Beyond",
+   "paths": [
+    "Grim Scythe Style",
+    "Spooky Specter"
+   ],
+   "path1": [
+    "Sphere of Fear",
+    "Grave Danger",
+    "Ghastly Damage"
+   ],
+   "path2": [
+    "It's Alive!",
+    "Haunted Help",
+    "Soul Sampler"
+   ],
+   "wowpow": ""
+  },
+  "3014": {
+   "page": "Rip Tide",
+   "basic": [
+    "Whale On 'Em",
+    "Bigger Fish to Fly",
+    "Fresh Fish",
+    "Blistering Blubber"
+   ],
+   "soulgem": "Reinventing the Whale",
+   "paths": [
+    "Fishy Fencer",
+    "Flounder Pounder"
+   ],
+   "path1": [
+    "Nipping Needle Nose",
+    "Practiced Parry",
+    "Straight As An Angler"
+   ],
+   "path2": [
+    "Shark Surprise",
+    "Time to Hammer",
+    "Shark Bite Bait"
+   ],
+   "wowpow": ""
+  },
+  "3015": {
+   "page": "Punk Shock",
+   "basic": [
+    "Spark Splash",
+    "High Boltage",
+    "OHMG",
+    "Hypercharged"
+   ],
+   "soulgem": "Eelectrocute",
+   "paths": [
+    "Conductor Constructor",
+    "Eelectrocutey"
+   ],
+   "path1": [
+    "H2Throw",
+    "Troubled Waters",
+    "Bolting Blob"
+   ],
+   "path2": [
+    "Positively Charged",
+    "It Hertz",
+    "Re-Volting Shock"
+   ],
+   "wowpow": ""
+  },
+  "3400": {
+   "page": "Fiesta",
+   "basic": [
+    "Laid Low",
+    "Macho Amigos",
+    "Solo",
+    "Encore"
+   ],
+   "soulgem": "Family Fiesta",
+   "paths": [
+    "What Amigos are for.",
+    "Super Star!"
+   ],
+   "path1": [
+    "Take It Away Amigos!",
+    "Mucho Amigos",
+    "Soul Jam"
+   ],
+   "path2": [
+    "Diva",
+    "Shot to the Hearth",
+    "Big Finish"
+   ],
+   "wowpow": ""
+  },
+  "3401": {
+   "page": "High Volt",
+   "basic": [
+    "Traveling Light",
+    "Quick Currents",
+    "Insulated Iron",
+    "Amped Lamp"
+   ],
+   "soulgem": "Re-Fused",
+   "paths": [
+    "Light Fighter",
+    "Light in Shining Armor"
+   ],
+   "path1": [
+    "Bring Into Light",
+    "Stun Shocked",
+    "Black Out"
+   ],
+   "path2": [
+    "Bright Idea",
+    "Everything is Relative",
+    "Unbreakable"
+   ],
+   "wowpow": ""
+  },
+  "3402": {
+   "page": "Splat",
+   "basic": [
+    "Have An Inkling",
+    "Dye Hard",
+    "Broad Strokes",
+    "Scape-Goat"
+   ],
+   "soulgem": "Bringing the Stain",
+   "paths": [
+    "Prolific Painter",
+    "Abstract Designer"
+   ],
+   "path1": [
+    "Wet Paint",
+    "Canvas the Area",
+    "Shades of Pain"
+   ],
+   "path2": [
+    "Running Colors",
+    "Stroke of Genius",
+    "Graffiti Gruff"
+   ],
+   "wowpow": ""
+  },
+  "3406": {
+   "page": "Stormblade",
+   "basic": [
+    "Cyclone Surge",
+    "Storm Dive",
+    "Fan of Feathers",
+    "Feather Barrage"
+   ],
+   "soulgem": "Feather Weather",
+   "paths": [
+    "Wind Warrior",
+    "Blade Dancer"
+   ],
+   "path1": [
+    "Wind Wall",
+    "Sharpened Winds",
+    "Down Draft"
+   ],
+   "path2": [
+    "Fist Full of Feathers",
+    "Storm Sais",
+    "Feather the Storm"
+   ],
+   "wowpow": "None"
+  },
+  "3411": {
+   "page": "Smash Hit",
+   "basic": [
+    "Connect and Disconnect",
+    "Junkyard Dog",
+    "Spikey Spinner",
+    "Junker"
+   ],
+   "soulgem": "Down, Under",
+   "paths": [
+    "Bolder Boulder",
+    "Chain Champ"
+   ],
+   "path1": [
+    "Heap",
+    "Better Together",
+    "Catch!"
+   ],
+   "path2": [
+    "G'Day",
+    "Cut Loose",
+    "Earth Currents"
+   ],
+   "wowpow": ""
+  },
+  "3412": {
+   "page": "Spitfire",
+   "basic": [
+    "Flamenado",
+    "Flamenado Chasers",
+    "Flame Fury",
+    "Intensified Fury"
+   ],
+   "soulgem": "The Flamenadoing",
+   "paths": [
+    "Speed Demon",
+    "Fusion"
+   ],
+   "path1": [
+    "Mega Marathon",
+    "Nitro Boost",
+    "Triathlete"
+   ],
+   "path2": [
+    "Flamenado 2",
+    "Fuel Injected Claws",
+    "Volcanic Armor"
+   ],
+   "wowpow": ""
+  },
+  "3413": {
+   "page": "Jet-Vac",
+   "basic": [
+    "Fiester Fan",
+    "Jet-Vac Jet Pack",
+    "Vac Blaster 9000",
+    "Turbine Suction Fan"
+   ],
+   "soulgem": "Eagle-Air Battle Gear",
+   "paths": [
+    "Bird Blaster",
+    "Vac-Packeteer"
+   ],
+   "path1": [
+    "Piercing Winds",
+    "Vac Master-Blaster 20X",
+    "Super Suction Air Blaster"
+   ],
+   "path2": [
+    "Tank Reserves",
+    "The Mulcher",
+    "Flying Corkscrew"
+   ],
+   "wowpow": "Shoot the Breeze!"
+  },
+  "3414": {
+   "page": "Trigger Happy",
+   "basic": [
+    "Golden Super Charge",
+    "Pot O' Gold",
+    "Golden Mega Charge",
+    "Golden Machine Gun"
+   ],
+   "soulgem": "Infinite Ammo",
+   "paths": [
+    "Golden Frenzy",
+    "Golden Money Bags"
+   ],
+   "path1": [
+    "Happiness Is A Golden Gun",
+    "Bouncing Bullets",
+    "Golden Yamato Blast"
+   ],
+   "path2": [
+    "Just Throwing Money Away",
+    "Coinsplosion",
+    "Heads or Tails"
+   ],
+   "wowpow": "Megablast"
+  },
+  "3415": {
+   "page": "Stealth Elf",
+   "basic": [
+    "Straw Pook Scarecrow",
+    "Dragonfang Dagger",
+    "Sturdy Scarecrow",
+    "Arboreal Acrobatics"
+   ],
+   "soulgem": "Sylvan Regeneration",
+   "paths": [
+    "Pook Blade Saint",
+    "Forest Ninja"
+   ],
+   "path1": [
+    "Elf Jitsu",
+    "Elven Sunblade",
+    "Shadowsbane Blade Dance"
+   ],
+   "path2": [
+    "Scare-crio Trio",
+    "Scarecrow Booby Trap",
+    "Scarecrow Spin Slicer"
+   ],
+   "wowpow": "Knife Blender"
+  },
+  "3416": {
+   "page": "Terrafin",
+   "basic": [
+    "Brass Knuckles",
+    "Mega Bellyflop",
+    "Feeding Frenzy",
+    "Multi Target Punches"
+   ],
+   "soulgem": "Surface Feeder",
+   "paths": [
+    "Sandhog",
+    "Brawler"
+   ],
+   "path1": [
+    "Master Earth Swimmer",
+    "Homing Frenzy",
+    "Razorfin"
+   ],
+   "path2": [
+    "Pugilist",
+    "Spiked Knuckles",
+    "Frenzy Shield"
+   ],
+   "wowpow": "Dive Burrow"
+  },
+  "3417": {
+   "page": "Roller Brawl",
+   "basic": [
+    "Skateblades",
+    "Impact Skater",
+    "Deadly Clothesline",
+    "Aggression"
+   ],
+   "soulgem": "Cursed Helmet",
+   "paths": [
+    "Shadow Skater",
+    "Skateblade Siren"
+   ],
+   "path1": [
+    "Pirouette",
+    "Hardened Helm",
+    "Bullrush"
+   ],
+   "path2": [
+    "Skateblade Trap",
+    "Critical Claws",
+    "Spinning Saws"
+   ],
+   "wowpow": ""
+  },
+  "3420": {
+   "page": "Pop Fizz",
+   "basic": [
+    "New Concoctions",
+    "Puddle of Pain",
+    "Raging Beast",
+    "Dexterous Delivery"
+   ],
+   "soulgem": "Shake It!",
+   "paths": [
+    "Best of the Beast!",
+    "Mad Scientist"
+   ],
+   "path1": [
+    "More Beast!",
+    "Berserker Boost",
+    "Mutant Beast"
+   ],
+   "path2": [
+    "Master Chemist",
+    "Mixologist",
+    "All in"
+   ],
+   "wowpow": "Beaker Buddy"
+  },
+  "3421": {
+   "page": "Eruptor",
+   "basic": [
+    "Big Blob Lava Throw",
+    "Fiery Remains",
+    "Eruption-Flying Tephra",
+    "Magma Ball"
+   ],
+   "soulgem": "Mega Magma Balls",
+   "paths": [
+    "Magmantor",
+    "Volcanor"
+   ],
+   "path1": [
+    "Heavy Duty Plasma",
+    "Lava Blob Bomb",
+    "Beasts of Conflagration"
+   ],
+   "path2": [
+    "Quick Eruption",
+    "Pyroxysmal Super Eruption",
+    "Revenge of Prometheus"
+   ],
+   "wowpow": "Lava Barf"
+  },
+  "3422": {
+   "page": "Gill Grunt",
+   "basic": [
+    "Barbed Harpoons",
+    "high pressure power hose",
+    "harpoon repeater",
+    "Water Jetpack"
+   ],
+   "soulgem": "Anchor Cannon",
+   "paths": [
+    "harpooner",
+    "water beaver"
+   ],
+   "path1": [
+    "quadent harpoons",
+    "piercing harpoons",
+    "triple-shot harpoon"
+   ],
+   "path2": [
+    "reservant water tank",
+    "boiling walter hose",
+    "neptune gun (does not shoot the aforementioned planet)"
+   ],
+   "wowpow": "Anchor's Away"
+  },
+  "3423": {
+   "page": "Donkey Kong",
+   "basic": [
+    "Bongo Barrel",
+    "Super Donkey Kong",
+    "Barrels of Fun",
+    "Old School"
+   ],
+   "soulgem": "Diddy You Call?",
+   "paths": [
+    "Powder Keg Power",
+    "Pointy Preperations"
+   ],
+   "path1": [
+    "Boom Barrels",
+    "Explosive Landing",
+    "Bongo Blast"
+   ],
+   "path2": [
+    "Spikey Barrels",
+    "Barrel Rolled",
+    "Healthy Kong"
+   ],
+   "wowpow": ""
+  },
+  "3424": {
+   "page": "Bowser",
+   "basic": [
+    "Molten Bowser",
+    "Shell Smash",
+    "Red Koopa",
+    "Royal Authority"
+   ],
+   "soulgem": "Molten Bones",
+   "paths": [
+    "Koopa Commander",
+    "Molten Monstrosity"
+   ],
+   "path1": [
+    "Warp Pipe",
+    "Koopa Paratroopa",
+    "Super Koopa Spin"
+   ],
+   "path2": [
+    "Molten Hammer",
+    "Bowser Bomb",
+    "Infinite Fire"
+   ],
+   "wowpow": ""
+  },
+  "3425": {
+   "page": "Dive-Clops",
+   "basic": [
+    "Put the Eye in Geyser",
+    "Echo Enhancers",
+    "Power of the Pupil",
+    "Ping"
+   ],
+   "soulgem": "Depth of Field",
+   "paths": [
+    "Tidal Torpedoes",
+    "Dousing Dowser"
+   ],
+   "path1": [
+    "Torpeslow",
+    "Mark II Waterpedo",
+    "Neato Waterpedo"
+   ],
+   "path2": [
+    "Sonar Smarts",
+    "Counter Measures",
+    "Hatch Off to You"
+   ],
+   "wowpow": ""
+  },
+  "3426": {
+   "page": "Astroblast",
+   "basic": [
+    "Starsault",
+    "Solar Field",
+    "Solar Powered",
+    "Space Rocks!"
+   ],
+   "soulgem": "Wool Encounters",
+   "paths": [
+    "Cosmic Technology",
+    "Nova Hopper"
+   ],
+   "path1": [
+    "Surface of the Sun",
+    "Meatier Meteors",
+    "Star Light: Star Bright"
+   ],
+   "path2": [
+    "Meteor Shower",
+    "Full Spectrum",
+    "Supernova"
+   ],
+   "wowpow": ""
+  },
+  "3427": {
+   "page": "Nightfall",
+   "basic": [
+    "Whip Lash",
+    "Split Hook Ends",
+    "Hair Today, Gone Now",
+    "Scape-Goat"
+   ],
+   "soulgem": "Bad Hair Day",
+   "paths": [
+    "Master Angler",
+    "Dread Head"
+   ],
+   "path1": [
+    "Splitting Hairs",
+    "Comb-O",
+    "Playing Hooky"
+   ],
+   "path2": [
+    "Ambrush Rush",
+    "Up-Sweep",
+    "Vast Volume"
+   ],
+   "wowpow": ""
+  },
+  "3428": {
+   "page": "Thrillipede",
+   "basic": [
+    "Cocooned",
+    "Bug N' Cover",
+    "Mind Your Beeswax",
+    "Cocooties"
+   ],
+   "soulgem": "Beautiflies",
+   "paths": [
+    "Mighty-morphosis",
+    "Insistent Insect"
+   ],
+   "path1": [
+    "Better Fly",
+    "Bugging Out",
+    "Tick It To 'Em"
+   ],
+   "path2": [
+    "Gnawing Gnats",
+    "Nesting Gnats",
+    "Insect Epidemic"
+   ],
+   "wowpow": ""
+  }
+ }
+}

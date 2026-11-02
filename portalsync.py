@@ -82,7 +82,7 @@ THUMBS = os.path.join(HERE, 'thumbnails')  # optional pictures for Add Skylander
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
 USBIP_EXE = r'C:\Program Files\USBip\usbip.exe'
-VERSION = '1.6.2'  # compared with the latest GitHub release at start (latest_release)
+VERSION = '1.7.0'  # compared with the latest GitHub release at start (latest_release)
 RELEASES = 'https://api.github.com/repos/rhsts/portalsync/releases/latest'
 HIDE_DLL = os.path.join(HERE, 'portal_hide.dll')
 HIDE_FROM = {'cemu.exe', 'cemu_release.exe', 'rpcs3.exe', 'dolphin.exe', 'shadps4.exe'}  # emulators that get portal_hide.dll
@@ -149,6 +149,11 @@ try:  # "id:variant" -> [game, element], from Dolphin's list_skylanders (Senseis
         DETAILS = json.load(_f)
 except OSError:
     DETAILS = {}
+try:  # "id" -> the Skylanders Wiki's upgrade names (CC-BY-SA), made by tools/fetch_upgrade_names.py
+    with open(os.path.join(HERE, 'upgrade_names.json'), encoding='utf-8') as _f:
+        UPGRADE_NAMES = json.load(_f).get('figures', {})
+except (OSError, ValueError):
+    UPGRADE_NAMES = {}
 
 
 def figure_name(data):
@@ -253,9 +258,10 @@ def b_checksum(d, b):
     return struct.unpack_from('<H', data, 0)[0], crc16(b'\x06\x01' + data[2:])
 
 
-def seal(d, a, b=None):
-    """Set the checksums of main area a (and second area b) in a decrypted image."""
+def seal(d, a, b=None, trap=False):
+    """Set the checksums of main area a (and second area b) in a decrypted image; a trap's type 3 is its own."""
     (_, t1), (_, t2), (_, t3) = area_checksums(d, a)
+    t3 = trap_checksums(d, a)[2][1] if trap else t3
     struct.pack_into('<HH', d, a + 0x0A, t3, t2)
     struct.pack_into('<H', d, a + 0x0E, area_checksums(d, a)[0][1])  # type 1 covers types 2 and 3
     if b is not None:
@@ -282,29 +288,188 @@ def repaired(data):
     return recrypt(data, bytes(d))
 
 
-def edited(data, gold=None, nickname=None, level=None):
-    """The figure with new gold, nickname and/or level, saved the way the game and Dolphin's SetData save: into
-    the older area of each pair, with a counter one past the newest, so the previous save stays as fallback."""
+def raw_a(a, st):
+    """Struct offset (Runes' numbering, sector trailers skipped) -> raw offset, for an area starting at a sector."""
+    blk, off = divmod(st, 16)
+    return a + (blk + blk // 3) * 16 + off
+
+
+def raw_b(b, st):
+    """Struct offset 0x70-0xAF of the second area at b (0x110 / 0x2D0) -> raw offset."""
+    blk, off = divmod(st - 0x70, 16)
+    return b + (blk + (blk >= 2)) * 16 + off
+
+
+def struct_bytes(d, a, start, n):
+    """n struct bytes from offset start of the area at a, read across blocks with the sector trailers skipped."""
+    return bytes(d[raw_a(a, st)] for st in range(start, start + n))
+
+
+def trap_checksums(d, a):
+    """A trap's type 3 covers 0x110 struct bytes from 0x40 (every villain slot; matches all of the user's trap
+    dumps, 2026-10-27); types 1 and 2 as a Skylander's."""
+    (s1, c1), (s2, c2), _ = area_checksums(d, a)
+    return [(s1, c1), (s2, c2), (struct.unpack_from('<H', d, a + 0x0A)[0], crc16(struct_bytes(d, a, 0x40, 0x110)))]
+
+
+def edit(data, gold=None, nickname=None, xp=None, upgrades=None, gearbits=None, villain=None):
+    """The figure with new values, saved the way the game and Dolphin's SetData save: into the older area of each
+    pair, with a counter one past the newest, so the previous save stays as fallback. Only the fields proven on
+    the user's figures (docs/FIGURE_FORMAT.md)."""
+    trap = kind_of(data) == 'trap'
     d = bytearray(crypt(data))
     a, b = newest(d, 0x80, 0x240, 9), newest(d, 0x110, 0x2D0, 2)
     a2, b2 = 0x80 + 0x240 - a, 0x110 + 0x2D0 - b
-    for o in A_BLOCKS:
-        d[a2 + o:a2 + o + 16] = d[a + o:a + o + 16]
-    for o in B_BLOCKS:
-        d[b2 + o:b2 + o + 16] = d[b + o:b + o + 16]
-    d[a2 + 9], d[b2 + 2] = (d[a + 9] + 1) & 0xFF, (d[b + 2] + 1) & 0xFF
+    for st in range(0, 0x150 if trap else 0x70, 16):  # a trap's area runs on over all its villain slots
+        d[raw_a(a2, st):raw_a(a2, st) + 16] = d[raw_a(a, st):raw_a(a, st) + 16]
+    d[a2 + 9] = (d[a + 9] + 1) & 0xFF
+    if not trap:
+        for o in B_BLOCKS:
+            d[b2 + o:b2 + o + 16] = d[b + o:b + o + 16]
+        d[b2 + 2] = (d[b + 2] + 1) & 0xFF
+    A = lambda st: raw_a(a2, st)
+    B = lambda st: raw_b(b2, st)
     if gold is not None:
-        struct.pack_into('<H', d, a2 + 3, gold)
+        struct.pack_into('<H', d, A(0x03), gold)
     if nickname is not None:
         name = nickname.encode('utf-16-le').ljust(32, b'\0')
-        d[a2 + 0x20:a2 + 0x30], d[a2 + 0x40:a2 + 0x50] = name[:16], name[16:32]
-    if level is not None:
-        xp = LEVELS[level - 1]
-        d[a2:a2 + 3] = min(xp, 33000).to_bytes(3, 'little')
-        struct.pack_into('<H', d, b2 + 3, min(max(xp - 33000, 0), 63500))
-        d[b2 + 8:b2 + 11] = min(max(xp - 96500, 0), 101000).to_bytes(3, 'little')
-    seal(d, a2, b2)
+        d[A(0x20):A(0x20) + 16], d[A(0x30):A(0x30) + 16] = name[:16], name[16:32]
+    if xp is not None:
+        d[A(0x00):A(0x00) + 3] = min(xp, 33000).to_bytes(3, 'little')
+        struct.pack_into('<H', d, B(0x73), min(max(xp - 33000, 0), 63500))
+        struct.pack_into('<I', d, B(0x78), min(max(xp - 96500, 0), 101000))
+    if upgrades is not None:
+        struct.pack_into('<H', d, A(0x10), (int.from_bytes(d[A(0x10):A(0x10) + 2], 'little') & ~0x3FF) | (upgrades & 0x3FF))
+        struct.pack_into('<H', d, B(0x76), (int.from_bytes(d[B(0x76):B(0x76) + 2], 'little') & ~0xF) | (upgrades >> 10 & 0xF))
+    if gearbits is not None:
+        struct.pack_into('<H', d, B(0x78), gearbits)
+    if villain is not None:
+        d[A(0x10)] = villain
+    seal(d, a2, None if trap else b2, trap)
     return recrypt(data, bytes(d))
+
+
+def edited(data, gold=None, nickname=None, level=None):
+    """edit() with a level instead of experience: the level's first XP."""
+    return edit(data, gold, nickname, None if level is None else LEVELS[level - 1])
+
+
+def fix_checksums(data, plain):
+    """A hand-edited decrypted image with the checksums of its newest areas set (Skylanders, vehicles, traps;
+    other kinds keep theirs), encrypted: the editor's Hex tab."""
+    d, k = bytearray(plain), kind_of(plain)
+    if k in ('skylander', 'vehicle', 'trap'):
+        a, b = newest(d, 0x80, 0x240, 9), newest(d, 0x110, 0x2D0, 2)
+        seal(d, a, b if k != 'trap' and any(d[b:b + 16]) else None, k == 'trap')
+    return recrypt(data, bytes(d))
+
+
+def maxed(data):
+    """Level 20, 65000 gold and every upgrade the figure can have (its path kept, the first when none)."""
+    f = figure_fields(data)
+    full = 0b1011011101 if 1000 <= f['id'] < 3000 else 0b1111111101  # a Swapper half: 3 basic, 2 path upgrades
+    up = f['upgrades'] | full
+    if f['wowpow_ok']:
+        up |= 1 << 10
+    if 600 <= f['id'] < 700:  # a Sensei: Imaginators keeps its upgrades another way (see page_upgrades)
+        up = f['upgrades']
+    return edit(data, gold=None if f['gold'] is None else 65000, xp=None if f['level'] is None else LEVELS[-1], upgrades=up)
+
+
+def cloned(data):
+    """The same figure and progress under a new random UID, re-encrypted for it: a .sky to play virtually."""
+    plain = bytearray(crypt(data))
+    taken = {e[1] for e in played()}
+    while (uid := os.urandom(4)).hex() in taken:
+        pass
+    plain[0:5] = uid + bytes([uid[0] ^ uid[1] ^ uid[2] ^ uid[3]])
+    struct.pack_into('<H', plain, 0x1E, crc16(plain[:0x1E]))
+    return crypt(bytes(plain), encrypt=True)
+
+
+def kind_of(data):
+    """'skylander', 'trap', 'vehicle', 'crystal', 'new' (never saved by a game) or 'other' (items, trophies)."""
+    fid = struct.unpack_from('<H', data, 0x10)[0]
+    used = any(data[0x80:0x90]) or any(data[0x240:0x250])
+    if 210 <= fid <= 220:
+        return 'trap' if used else 'new'
+    if 3200 <= fid < 3300:
+        return 'vehicle' if used else 'new'
+    if 680 <= fid < 700:
+        return 'crystal'
+    if 200 <= fid < 400 or 3300 <= fid < 3400 or fid >= 3500:
+        return 'other'
+    return 'skylander' if used else 'new'
+
+
+def date_at(d, o):
+    """'2026-10-11 13:28' from a minute, hour, day, month, year (u16) field; '' when never set."""
+    return f'{struct.unpack_from("<H", d, o + 4)[0]:04}-{d[o + 3]:02}-{d[o + 2]:02} {d[o + 1]:02}:{d[o]:02}' if any(d[o:o + 6]) else ''
+
+
+PLATFORMS_2011 = ('Wii', 'Xbox 360', 'PS3', 'PC', '3DS')
+PLATFORMS_2013 = ('Wii U / Android', 'Xbox One', 'PS4', 'iOS', '', '', 'Switch')
+UPGRADES = ('On a path', 'Bottom path', 'Upgrade 1', 'Upgrade 2', 'Upgrade 3', 'Upgrade 4', 'Path upgrade 1',
+            'Path upgrade 2', 'Path upgrade 3', 'Soul Gem', 'Wow Pow / Sky-Chi', 'Other path upgrade 1',
+            'Other path upgrade 2', 'Other path upgrade 3')
+FIGURE_KINDS = {'skylander': 'Skylander', 'trap': 'Trap', 'vehicle': 'Vehicle', 'crystal': 'Creation Crystal',
+                'new': 'Never saved by a game', 'other': 'Item or trophy'}
+
+
+def figure_fields(data):
+    """Everything the figure editor shows about a figure image, as a dict. Keys ending in _ are documented (Runes)
+    but not proven on real figures: shown read-only. docs/FIGURE_FORMAT.md has the layout and the evidence."""
+    fid, var = struct.unpack_from('<H', data, 0x10)[0], struct.unpack_from('<H', data, 0x1C)[0]
+    details = DETAILS.get(f'{fid}:{var}') or DETAILS.get(f'{fid}:0') or ['', '']
+    f = {'name': figure_name(data), 'uid': data[:4].hex(), 'id': fid, 'variant': var, 'kind': kind_of(data),
+         'game': details[0], 'element': details[1]}
+    if f['kind'] in ('new', 'other'):
+        return f
+    d = crypt(data)
+    a, b = newest(d, 0x80, 0x240, 9), newest(d, 0x110, 0x2D0, 2)
+    A = lambda st, n: int.from_bytes(d[raw_a(a, st):raw_a(a, st) + n], 'little')
+    B = lambda st, n: int.from_bytes(d[raw_b(b, st):raw_b(b, st) + n], 'little')
+    has_b = any(data[b:b + 16])
+    if f['kind'] == 'trap':
+        f['damaged'] = any(s != c for s, c in trap_checksums(d, a))
+        f['villains'] = [(A(0x10 + k * 0x30, 1), A(0x11 + k * 0x30, 1)) for k in range(min(A(0x01, 1), 6))]
+        return f
+    if f['kind'] == 'crystal':  # nothing proven: Runes' crystal notes may be wrong, the user's crystal is blank
+        f['money_'], f['time_'], f['placed_'] = A(0x03, 2), A(0x05, 4), date_at(d, raw_a(a, 0x40))
+        f['blank'] = not any(d[0x80:0x90]) and not any(d[0x240:0x250])
+        return f
+    f['damaged'] = any(s != c for s, c in area_checksums(d, a)) or (has_b and b_checksum(d, b)[0] != b_checksum(d, b)[1])
+    f['time'], f['placed'] = A(0x05, 4), date_at(d, raw_a(a, 0x40))
+    if f['kind'] == 'vehicle':
+        f['gearbits'] = B(0x78, 2) if has_b else 0
+        f['vehicle_xp_'], f['vehicle_flags_'], f['mods_'] = A(0x00, 3), A(0x10, 3), A(0x3E, 2)
+        f['cosmetics_'] = [A(o, 1) for o in (0x18, 0x19, 0x1A, 0x1B)]  # decoration, topper, neon, shout
+        return f
+    xp = A(0x00, 3) + (B(0x73, 2) + B(0x78, 4) if has_b else 0)
+    f['xp'] = xp
+    f['level'] = None if 1000 <= fid < 2000 or 600 <= fid < 700 else sum(xp >= need for need in LEVELS)
+    f['gold'] = None if 1000 <= fid < 2000 else A(0x03, 2)  # a Swapper's bottom half: the top keeps them
+    f['nickname'] = (d[raw_a(a, 0x20):raw_a(a, 0x20) + 16] + d[raw_a(a, 0x30):raw_a(a, 0x30) + 16]).decode(
+        'utf-16-le', 'replace').split('\0')[0]
+    f['reset'], f['owners'] = date_at(d, raw_a(a, 0x50)), A(0x4F, 1)
+    build = d[raw_a(a, 0x4C):raw_a(a, 0x4C) + 3]
+    f['build'] = f'20{build[0]:02}-{build[1]:02}-{build[2]:02}' if any(build) else ''
+    f['platforms'] = [p for i, p in enumerate(PLATFORMS_2011) if A(0x13, 1) >> i & 1] + \
+                     [p for i, p in enumerate(PLATFORMS_2013) if p and A(0x17, 1) >> i & 1]
+    f['upgrades'] = ((B(0x76, 2) & 0xF) << 10 if has_b else 0) | (A(0x10, 3) & 0x3FF)
+    f['wowpow_ok'] = bool(var & 0x0800) or 600 <= fid < 700 or bool(f['upgrades'] >> 10 & 1)
+    return f
+
+
+def upgrade_names(fid):
+    """The Skylanders Wiki's names of a character's upgrades (upgrade_names.json), blank where unknown. A Swapper
+    half has 2 path upgrades (as on the user's halves) and the wiki's 3 basic upgrades in boxes 1-3: the user's
+    Hoot Loop (Bottom) has only box 1 set and the game shows only Portable Hole, the wiki's first, as bought
+    (2026-10-30). Box 4 is no upgrade the game sells, so the editor leaves it alone."""
+    n = UPGRADE_NAMES.get(str(fid), {})
+    return {'page': n.get('page', ''), 'basic': n.get('basic', [''] * 4), 'soulgem': n.get('soulgem', ''),
+            'paths': n.get('paths', ['', '']), 'path1': n.get('path1', [''] * 3), 'path2': n.get('path2', [''] * 3),
+            'wowpow': n.get('wowpow', '')}
 
 
 def area_checksums(d, a):
@@ -1973,7 +2138,7 @@ def download_pictures(url=PICTURES, folder=None):
 
 
 REQUIRED_FILES = ('PortalSync.exe', 'portal_hide.dll', 'portal_descriptors.json', 'figure_names.json', 'figure_details.json')
-OPTIONAL_FILES = ('README.md', 'LICENSE')  # nothing else in a release zip is ever written: user data stays put
+OPTIONAL_FILES = ('README.md', 'LICENSE', 'upgrade_names.json')  # nothing else in a release zip is ever written: user data stays put
 UPDATE_MAX = 200 * 1024 * 1024  # the download, and all files unpacked together
 UPDATE_FILE_MAX = 100 * 1024 * 1024  # one file unpacked
 UPDATE_JOURNAL = 'update-journal.json'  # exists only while files are being swapped (see recover_update)
@@ -2412,12 +2577,12 @@ class App:
                  ACCENT='#0067c0', ACCENT_HOVER='#1975c5', ACCENT_DOWN='#005ba8', SELECTED='#cce4f7', BAD='#c42b1c',
                  ODD='#fafafa', HOVER='#f5f5f5', BUTTON='#fbfbfb', PRESSED='#ededed', EDGE='#d1d1d1',
                  FIELD_EDGE='#c8c8c8', THUMB='#e0e0e0', THUMB_HOVER='#cfcfcf', DISABLED='#a0a0a0',
-                 DISABLED_BG='#e0e0e0', BOX_EDGE='#8a8a8a', BOX_EDGE_HOVER='#5f5f5f')
+                 DISABLED_BG='#e0e0e0', BOX_EDGE='#8a8a8a', BOX_EDGE_HOVER='#5f5f5f', CHANGED='#fff4ce')
     DARK = dict(BG='#202020', CARD='#2b2b2b', LINE='#3b3b3b', TEXT='#f2f2f2', MUTED='#b0b0b0', FAINT='#8f8f8f',
                 ACCENT='#0078d4', ACCENT_HOVER='#1a86d9', ACCENT_DOWN='#006cbe', SELECTED='#204a6e', BAD='#ff99a4',
                 ODD='#303030', HOVER='#383838', BUTTON='#373737', PRESSED='#2f2f2f', EDGE='#4a4a4a',
                 FIELD_EDGE='#5a5a5a', THUMB='#4a4a4a', THUMB_HOVER='#5c5c5c', DISABLED='#6f6f6f',
-                DISABLED_BG='#3a3a3a', BOX_EDGE='#9a9a9a', BOX_EDGE_HOVER='#c8c8c8')
+                DISABLED_BG='#3a3a3a', BOX_EDGE='#9a9a9a', BOX_EDGE_HOVER='#c8c8c8', CHANGED='#4d4223')
     locals().update(LIGHT)  # class defaults; __init__ switches to DARK when chosen
     STATE_COLOURS = (('claimed', '#0f7b0f'), ('not plugged in', '#8a8a8a'), ('', '#c45500'))  # first match wins
     QUIET = re.compile(r'\S+ (portal [<-]|GET_DESCRIPTOR|SET_CONFIGURATION|UNLINK|portal sound: \d)')  # portalsync.log only
@@ -2600,6 +2765,10 @@ class App:
             (box, {'side': 'left', 'sticky': ''}),
             ('Checkbutton.focus', {'side': 'left', 'sticky': 'w', 'children': [('Checkbutton.label', {'sticky': 'nswe'})]})]})])
         s.configure('Card.TCheckbutton', background=C)
+        s.configure('Card.TRadiobutton', background=C, indicatorbackground=C, indicatorforeground=A)
+        s.map('Card.TRadiobutton', background=[('active', C)], indicatorbackground=[('active', self.HOVER)])
+        s.configure('CardFaint.TLabel', background=C, foreground=self.FAINT, font=('Segoe UI', 9))
+        s.configure('Bad.TLabel', background=C, foreground=self.BAD, font=('Segoe UI Semibold', 10))
         s.map('Card.TCheckbutton', background=[('active', C)])
         s.configure('Treeview', fieldbackground=C, rowheight=int(line * 2.1), bordercolor=C, **flat(C))
         s.map('Treeview', background=[('selected', self.SELECTED)], foreground=[('selected', self.TEXT)])
@@ -4065,6 +4234,97 @@ class App:
             self.activity.pack_forget()
         self.remember(show_log=self.show_log.get())
 
+    def selected_slot(self):
+        """(virtual slot, image) of the figure selected in the slot table, or None."""
+        n = next(iter(map(int, self.tree.selection())), None)
+        with self.server.cv:
+            s = self.portal.slots[n] if n is not None else None
+            return (n, bytes(s.data)) if s is not None and s.path and s.status & 1 else None
+
+    def edit_figure(self):
+        picked = self.selected_slot()
+        if picked:
+            FigureEditor(self, picked[0])
+
+    def clone_figure(self):
+        """A copy of the selected figure under a new ID, as a file in dumps/: Add Skylander lists it."""
+        from tkinter import messagebox
+        picked = self.selected_slot()
+        if not picked:
+            return
+        data = cloned(picked[1])
+        path = dump_path(data, 'current')
+        try:
+            save_dump(path, data)
+        except OSError as e:
+            return messagebox.showerror('Clone figure', f'Not saved: {e}', parent=self.root)
+        log(f'cloned {figure_name(data)} {picked[1][:4].hex()} as {os.path.basename(path)}')
+        self.say(f'Cloned as {os.path.basename(path)} (new ID {data[:4].hex()}): find it under Add Skylander.')
+
+    def compare_figure(self):
+        """The selected figure side by side with one of its own copies in dumps/ or another loaded figure."""
+        import tkinter as tk
+        from tkinter import ttk
+        picked = self.selected_slot()
+        if not picked:
+            return
+        mine, uid = picked[1], picked[1][:4].hex()
+        others = []
+        for path in sorted(glob.glob(os.path.join(glob.escape(DUMPS), f'*({uid})*.sky')), key=os.path.getmtime, reverse=True):
+            try:
+                with open(path, 'rb') as f:
+                    data = f.read()
+            except OSError:
+                continue
+            if len(data) == 1024 and data != mine:
+                others.append((os.path.basename(path)[:-4], data))
+        with self.server.cv:
+            others += [(f'{figure_name(s.data)} (slot {i + 1})', bytes(s.data)) for i, s in enumerate(self.portal.slots)
+                       if s.path and s.status & 1 and i != picked[0]]
+        if not others:
+            return self.say(f'Nothing to compare {figure_name(mine)} with: no other copy and no other figure loaded.')
+        d = tk.Toplevel(self.root)
+        d.title('Compare figures')
+        d.configure(background=self.CARD)
+        d.transient(self.root)
+        body = ttk.Frame(d, style='Card.TFrame', padding=(20, 16))
+        body.pack(fill='both', expand=True)
+        ttk.Label(body, text=f'{figure_name(mine)} ({uid}) compared with', style='Section.TLabel').pack(anchor='w')
+        choice = tk.StringVar(value=others[0][0])
+        ttk.Combobox(body, textvariable=choice, values=[x[0] for x in others], state='readonly', width=64).pack(anchor='w', pady=(6, 10))
+        table = ttk.Treeview(body, columns=('this', 'other'), show='tree headings', height=22)
+        for col, text, width in (('#0', 'Field', 220), ('this', 'This figure', 260), ('other', 'Other', 260)):
+            table.heading(col, text=text)
+            table.column(col, width=width)
+        table.tag_configure('diff', background=self.CHANGED)
+        table.pack(fill='both', expand=True)
+
+        def shown(key, value):
+            if key == 'upgrades' and isinstance(value, int):
+                return ', '.join(UPGRADES[i] for i in range(14) if value >> i & 1) or 'none'
+            if key == 'villains':
+                return ', '.join(VILLAINS.get(v, str(v)) + (' (evolved)' if e else '') for v, e in value) or 'none'
+            if isinstance(value, dict):
+                return ', '.join(f'{k}: {v}' for k, v in value.items())
+            if isinstance(value, list):
+                return ', '.join(map(str, value))
+            return FIGURE_KINDS[value] if key == 'kind' else 'yes' if value is True else 'no' if value is False else str(value)
+
+        def fill(*_):
+            table.delete(*table.get_children())
+            other = dict(others)[choice.get()]
+            a, b = figure_fields(mine), figure_fields(other)
+            for key in [k for k in a if k in b] + [k for k in b if k not in a]:
+                if key in ('id', 'variant', 'wowpow_ok', 'blank'):
+                    continue
+                va, vb = (shown(key, x.get(key, '')) for x in (a, b))
+                table.insert('', 'end', text=key.rstrip('_').replace('_', ' ').capitalize() + (' (unverified)' if key.endswith('_') else ''),
+                             values=(va, vb), tags=('diff',) if va != vb else ())
+            n = len(changed_blocks(crypt(mine), crypt(other)) if mine[:32] == other[:32] else changed_blocks(mine, other))
+            table.insert('', 0, text='Data blocks that differ', values=(n, ''), tags=('diff',) if n else ())
+        choice.trace_add('write', fill)
+        fill()
+
     def figure_menu(self, event):
         """Right-click on the slot table: what can be done with that figure."""
         row = self.tree.identify_row(event.y)
@@ -4075,15 +4335,18 @@ class App:
             real = any(v == int(row) and self.portal.slots[v].path == path
                        for v, path, u in (self.mirror.slots.values() if self.mirror else ()))
             unsaved = self.portal.slots[int(row)].unsaved is not None
-        items = [('Unload', self.unload_selected, True),
+        items = [('Edit figure…', self.edit_figure, True),
+                 ('Compare with…', self.compare_figure, True),
+                 ('Clone as a new figure', self.clone_figure, True),
+                 None,
+                 ('Unload', self.unload_selected, True),
                  ('Replace with…', lambda: self.open_picker(replace=int(row)), not real),
                  ('Progress history…', self.show_history, True),
                  ('Backups…', self.show_backups, True)]
         if unsaved:  # its own file can't be written: the progress is only in memory
             items.append(('Save copy as…', self.save_copy, True))
         if self.mirror:  # these write to the figure, so it must be on the real portal
-            items += [None, ('Edit gold, nickname, level…', self.edit_selected, real),
-                      ('Repair damaged save…', self.repair_selected, real),
+            items += [None, ('Repair damaged save…', self.repair_selected, real),
                       ('Reset to a new figure…', self.reset_selected, real),
                       ('Restore progress…', self.restore_selected_figure, real)]
         self.popup(event.x_root, event.y_root, items)
@@ -4430,58 +4693,6 @@ class App:
                 'as SuperChargers did for Snap Shot. What it holds now is kept as its backup.'), parent=self.root):
             self.write(uid, repaired, 'a repair', f'Repaired {name} ({uid}): its save is intact again.')
 
-    def edit_selected(self):
-        import tkinter as tk
-        from tkinter import messagebox, ttk
-        picked = self.selected_real('Edit figure')
-        if not picked:
-            return
-        uid, data, name = picked
-        info = figure_info(data)
-        if info.kind != 'skylander':
-            return messagebox.showinfo('Edit figure', f'{name} has no level, gold or nickname to edit '
-                                       '(only Skylanders do; a new figure needs one game save first).', parent=self.root)
-        d = tk.Toplevel(self.root)
-        d.title('Edit figure')
-        d.configure(background=self.CARD)
-        d.transient(self.root)
-        d.resizable(False, False)
-        body = ttk.Frame(d, style='Card.TFrame', padding=(24, 20))
-        body.pack(fill='both')
-        ttk.Label(body, text=name, style='Figure.TLabel').grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 12))
-        nick, gold, level = tk.StringVar(value=info.nickname), tk.StringVar(value=info.gold), tk.StringVar(value=info.level or '')
-        ttk.Label(body, text='Nickname', style='Card.TLabel').grid(row=1, column=0, sticky='w', pady=4)
-        ttk.Entry(body, textvariable=nick, width=24).grid(row=1, column=1, sticky='w', padx=(16, 0))
-        ttk.Label(body, text='Gold (0-65000)', style='Card.TLabel').grid(row=2, column=0, sticky='w', pady=4)
-        ttk.Spinbox(body, from_=0, to=65000, increment=100, textvariable=gold, width=10).grid(row=2, column=1, sticky='w', padx=(16, 0))
-        ttk.Label(body, text='Level (1-20)', style='Card.TLabel').grid(row=3, column=0, sticky='w', pady=4)
-        box = ttk.Spinbox(body, from_=1, to=20, textvariable=level, width=10)
-        box.grid(row=3, column=1, sticky='w', padx=(16, 0))
-        if info.level is None:
-            box.state(['disabled'])  # Imaginators and Swapper bottom halves keep no level here
-
-        def save():
-            try:
-                g = int(gold.get())
-                lv = int(level.get()) if info.level is not None else None
-                if not 0 <= g <= 65000 or (lv is not None and not 1 <= lv <= 20) or len(nick.get()) > 15:
-                    raise ValueError
-            except ValueError:
-                return messagebox.showerror('Edit figure', 'Gold 0-65000, level 1-20, nickname up to 15 letters.', parent=d)
-            changes = {k: v for k, v, old in (('gold', g, info.gold), ('nickname', nick.get(), info.nickname),
-                                              ('level', lv, info.level)) if v != old}
-            d.destroy()
-            if changes:
-                self.write(uid, lambda held: edited(held, **changes), 'edits (' + ', '.join(changes) + ')',
-                           f'Wrote {", ".join(changes)} to {name} ({uid}).')
-        bar = ttk.Frame(d, padding=(24, 0, 24, 18), style='Card.TFrame')
-        bar.pack(fill='x')
-        ttk.Button(bar, text='Write to figure', style='Accent.TButton', command=save).pack(side='right')
-        ttk.Button(bar, text='Cancel', command=d.destroy).pack(side='right', padx=(0, 8))
-        ttk.Label(body, style='CardMuted.TLabel', wraplength=320, justify='left', text=(
-            'Saved the way the game saves: the previous save stays on the figure as its fallback, and what the '
-            'figure holds now is kept as its backup.')).grid(row=4, column=0, columnspan=2, sticky='w', pady=(12, 0))
-
     def backup_all(self):
         from tkinter import filedialog
         path = filedialog.asksaveasfilename(parent=self.root, defaultextension='.zip', filetypes=[('Zip files', '*.zip')],
@@ -4601,6 +4812,402 @@ class App:
             if name:
                 self.say(f'{name} removed from slot {n + 1}')
         self.refresh()
+
+
+class FigureEditor:
+    """The figure editor window (right-click → Edit figure…): stats, upgrades, trapped villain, vehicle gearbits
+    and the raw blocks of one loaded figure. Only fields proven on real figures can be changed (figure_fields).
+    A real figure is written like a restore (Mirror.write_image: its backup first, every block checked); a .sky
+    figure on the virtual portal is saved to its file, the old one kept as '... - before edit <time>.sky', and
+    put back in its slot so the game reads it again."""
+
+    def __init__(self, app, n):
+        import tkinter as tk
+        self.app, self.n = app, n
+        self.w = tk.Toplevel(app.root)
+        self.w.title('Edit figure')
+        self.w.configure(background=app.CARD)
+        self.w.transient(app.root)
+        self.w.minsize(760, 640)
+        self.picture = None
+        self.load()
+
+    def where(self):
+        """('real', uid, image the figure holds) or ('file', path, image in the slot), or None when it left."""
+        app = self.app
+        with app.server.cv:
+            s = app.portal.slots[self.n]
+            if not s.path or not s.status & 1:
+                return None
+            uid = next((u for v, path, u in (app.mirror.slots.values() if app.mirror else ()) if v == self.n and path == s.path), None)
+            if uid is None:
+                return 'file', s.path, bytes(s.data)
+        data = app.mirror.figure_data(uid)
+        return ('real', uid, data) if data is not None else None
+
+    def load(self):
+        """Read the figure again and (re)build the window: also Revert."""
+        from tkinter import ttk
+        for child in self.w.winfo_children():
+            child.destroy()
+        self.current = self.where()
+        if self.current is None:
+            ttk.Label(self.w, text='This figure is no longer on the portal.', style='Card.TLabel', padding=24).pack()
+            return
+        self.base, self.override, self.vars, self.bits, self.hex = self.current[2], None, {}, [], None
+        self.f = figure_fields(self.base)
+        self.build()
+
+    def build(self):
+        import tkinter as tk
+        from tkinter import ttk
+        app, f = self.app, self.f
+        body = ttk.Frame(self.w, style='Card.TFrame', padding=(24, 20))
+        body.pack(fill='both', expand=True)
+        head = ttk.Frame(body, style='Card.TFrame')
+        head.pack(fill='x')
+        path = os.path.join(THUMBS, f'{f["id"]}_{f["variant"]}.png')
+        path = path if os.path.exists(path) else next(iter(sorted(glob.glob(os.path.join(glob.escape(THUMBS), f'{f["id"]}_*.png')))), None)
+        try:
+            self.picture = tk.PhotoImage(master=self.w, file=path) if path else None
+            scale = -(-max(self.picture.width(), self.picture.height()) // 96) if self.picture else 1
+            self.picture = self.picture.subsample(scale) if scale > 1 else self.picture
+        except tk.TclError:
+            self.picture = None
+        if self.picture:
+            ttk.Label(head, image=self.picture, style='Card.TLabel').pack(side='left', padx=(0, 16))
+        top = ttk.Frame(head, style='Card.TFrame')
+        top.pack(side='left', fill='x', expand=True)
+        ttk.Label(top, text=f.get('nickname') or f['name'], style='Figure.TLabel').pack(anchor='w')
+        sub = [f['name'] if f.get('nickname') else '', f['game'], f['element'], FIGURE_KINDS[f['kind']], f'ID {f["uid"]}',
+               'on the real portal' if self.current[0] == 'real' else os.path.basename(self.current[1])]
+        ttk.Label(top, text='  ·  '.join(x for x in sub if x), style='CardMuted.TLabel', wraplength=520,
+                  justify='left').pack(anchor='w', pady=(2, 0))
+        if f.get('damaged'):
+            ttk.Label(top, text='Damaged save: the game says "A toy on the portal has a problem". Repair it first '
+                      '(right-click → Repair damaged save…).', style='Bad.TLabel', wraplength=520,
+                      justify='left').pack(anchor='w', pady=(6, 0))
+        tabs = {'skylander': ['Stats', 'Upgrades'], 'trap': ['Trap'], 'vehicle': ['Vehicle'],
+                'crystal': ['Crystal']}.get(f['kind'], ['Figure']) + ['Hex']
+        self.tab = tk.StringVar(value=tabs[0])
+        bar = ttk.Frame(body, style='Card.TFrame')
+        bar.pack(fill='x', pady=(12, 0))
+        tk.Frame(body, background=app.LINE, height=1).pack(fill='x')
+        holder = ttk.Frame(body, style='Card.TFrame')
+        holder.pack(fill='both', expand=True, pady=(14, 0))
+        self.pages = {}
+        for name in tabs:
+            page = self.pages[name] = ttk.Frame(holder, style='Card.TFrame')
+            getattr(self, 'page_' + name.lower())(page)
+            ttk.Radiobutton(bar, text=name, value=name, variable=self.tab, style='Tab.TRadiobutton',
+                            command=self.switch).pack(side='left')
+        foot = ttk.Frame(body, style='Card.TFrame')
+        foot.pack(fill='x', pady=(12, 0))
+        self.note = ttk.Label(foot, style='CardMuted.TLabel')
+        self.note.pack(side='left')
+        ttk.Button(foot, text='Write to figure' if self.current[0] == 'real' else 'Save', style='Accent.TButton',
+                   command=self.save).pack(side='right')
+        ttk.Button(foot, text='Revert', command=self.load).pack(side='right', padx=(0, 8))
+        if f['kind'] == 'skylander' and not f.get('damaged'):
+            ttk.Button(foot, text='Max out', command=self.max_out).pack(side='right', padx=(0, 8))
+        self.switch()
+
+    def switch(self):
+        for name, page in self.pages.items():
+            page.pack(fill='both', expand=True) if name == self.tab.get() else page.pack_forget()
+
+    def row(self, page, label, value=None, widget=None, note='', faint=False):
+        from tkinter import ttk
+        r = page.grid_size()[1]
+        ttk.Label(page, text=label, style='CardFaint.TLabel' if faint else 'CardMuted.TLabel').grid(
+            row=r, column=0, sticky='w', pady=4, padx=(0, 24))
+        (widget or ttk.Label(page, text=value if value not in (None, '') else '–', style='Card.TLabel')).grid(
+            row=r, column=1, sticky='w', pady=4)
+        if note:
+            ttk.Label(page, text=note, style='CardFaint.TLabel').grid(row=r, column=2, sticky='w', padx=(12, 0))
+
+    def heading(self, page, text, sub=''):
+        from tkinter import ttk
+        r = page.grid_size()[1]
+        ttk.Label(page, text=text, style='Card.TLabel', font=('Segoe UI Semibold', 10)).grid(
+            row=r, column=0, columnspan=3, sticky='w', pady=(14 if r else 0, 2))
+        if sub:
+            ttk.Label(page, text=sub, style='CardFaint.TLabel').grid(row=r + 1, column=0, columnspan=3, sticky='w', pady=(0, 4))
+
+    def field(self, page, key, label, value, widget, note=''):
+        import tkinter as tk
+        from tkinter import ttk
+        v = self.vars[key] = tk.StringVar(value=value)
+        if widget[0] == 'entry':
+            w = ttk.Entry(page, textvariable=v, width=22)
+        elif widget[0] == 'combo':
+            w = ttk.Combobox(page, textvariable=v, width=24, state='readonly', values=widget[1])
+        else:
+            w = ttk.Spinbox(page, textvariable=v, from_=widget[1], to=widget[2], increment=widget[3], width=10)
+        self.row(page, label, widget=w, note=note)
+
+    def page_stats(self, page):
+        f = self.f
+        self.heading(page, 'Progress')
+        self.field(page, 'nickname', 'Nickname', f['nickname'], ('entry',), 'up to 15 letters')
+        if f['gold'] is not None:
+            self.field(page, 'gold', 'Gold', f['gold'], ('spin', 0, 65000, 100), '0 - 65,000')
+        if f['level'] is not None:
+            self.field(page, 'level', 'Level', f['level'], ('spin', 1, 20, 1), f'{f["xp"]:,} XP now; a new level sets its first XP')
+        elif 1000 <= f['id'] < 2000:
+            self.row(page, 'Level and gold', 'kept on the top half of this Swapper')
+        hours, rest = divmod(f['time'], 3600)
+        self.heading(page, 'History')
+        self.row(page, 'Time on the portal', f'{hours:,} h {rest // 60} min' if f['time'] < 10 ** 8 else
+                 f'{f["time"]:,} s (not a believable value)')
+        self.row(page, 'Last placed', f['placed'])
+        self.row(page, 'First used / last reset', f['reset'])
+        self.row(page, 'Played on', ', '.join(f['platforms']))
+        self.row(page, 'Owner changes', f['owners'])
+        self.row(page, 'Last game build', f['build'])
+
+    def page_upgrades(self, page):
+        import tkinter as tk
+        from tkinter import ttk
+        f, up = self.f, self.f['upgrades']
+        n = self.names = upgrade_names(f['id'])
+        sensei, swapper = 600 <= f['id'] < 700, 1000 <= f['id'] < 3000
+        if sensei:
+            self.row(page, 'Read-only', "Imaginators keeps a Sensei's upgrades another way, so they can't be changed here.")
+        self.heading(page, 'Path', 'Path upgrades need a chosen path. Saving writes them as the game does.')
+        self.bits = [tk.BooleanVar(value=bool(up >> bit & 1)) for bit in range(11)]
+        self.path = tk.StringVar(value='bottom' if up & 3 == 3 else 'top' if up & 1 else 'none')
+        line = ttk.Frame(page, style='Card.TFrame')
+        line.grid(row=page.grid_size()[1], column=0, columnspan=3, sticky='w', pady=(2, 6))
+        fixed = sensei or self.path_fixed()
+        for value, text in (('none', 'No path yet'), ('top', n['paths'][0] or 'Top path'), ('bottom', n['paths'][1] or 'Bottom path')):
+            r = ttk.Radiobutton(line, text=text, value=value, variable=self.path, style='Card.TRadiobutton',
+                                command=self.path_chosen)
+            r.pack(side='left', padx=(0, 18))
+            if fixed and value != self.path.get():
+                r.state(['disabled'])
+        if fixed and not sensei:
+            self.row(page, '', 'The path stays while path upgrades are bought: how the game moves them is not known yet.')
+        self.heading(page, 'Upgrades', 'Names from the Skylanders Wiki, in its order.' if n['page'] else '')
+        self.path_boxes = []
+        for bit in range(2, 11):
+            if bit == 5 and swapper:
+                continue  # box 4 of a Swapper half: no upgrade the game sells (the wiki lists 3); kept as it is
+            c = ttk.Checkbutton(page, variable=self.bits[bit], style='Card.TCheckbutton')
+            if sensei or bit == 10 and not f['wowpow_ok'] or bit == 8 and swapper and not up >> 8 & 1:
+                c.state(['disabled'])  # Wow Pow: reposed figures and Senseis only; a Swapper half has 2 path upgrades
+            c.grid(row=page.grid_size()[1], column=0, columnspan=3, sticky='w', pady=3)
+            name = n['basic'][bit - 2] if 2 <= bit <= 5 else n['soulgem'] if bit == 9 else n['wowpow'] if bit == 10 else ''
+            c.configure(text=UPGRADES[bit] + (f'  ·  {name}' if name else ''))
+            if 6 <= bit <= 8:
+                self.path_boxes.append(c)
+        other = n['path1'] if up & 2 else n['path2']  # the path not chosen: the one bits 11-13 remember
+        kept = [UPGRADES[b] + (f' ({other[b - 11]})' if other[b - 11] else '') for b in range(11, 14) if up >> b & 1]
+        self.row(page, 'Kept from the other path', ', '.join(kept) or 'none', note='read-only')
+        self.path_chosen()
+
+    def path_fixed(self):
+        """True when the figure has a path and upgrades on either path (bits 6-8, 11-13): switching would need to
+        move them the way the game does, which no figure has shown yet."""
+        up = self.f['upgrades']
+        return bool(up & 1 and (up >> 6 & 7 or up >> 11 & 7))
+
+    def path_chosen(self):
+        """The path buttons set bits 0 and 1, and the path upgrades take that path's names."""
+        p = self.path.get()
+        self.bits[0].set(p != 'none')
+        self.bits[1].set(p == 'bottom')
+        names = self.names['path2' if p == 'bottom' else 'path1'] if p != 'none' else ['', '', '']
+        for i, c in enumerate(self.path_boxes):
+            c.configure(text=f'Path upgrade {i + 1}' + (f'  ·  {names[i]}' if names[i] else ''))
+
+    def page_trap(self, page):
+        f = self.f
+        if f['villains']:
+            current = VILLAINS.get(f['villains'][0][0], f'villain {f["villains"][0][0]}')
+            self.field(page, 'villain', 'Villain in the trap', current, ('combo', [VILLAINS[i] for i in sorted(VILLAINS)]),
+                       'any villain fits any trap')
+            self.heading(page, 'Villains caught before')
+            for vid, evolved in f['villains'][1:]:
+                self.row(page, VILLAINS.get(vid, f'villain {vid}'), 'evolved' if evolved else '')
+        else:
+            self.row(page, 'Villain', 'none caught yet')
+
+    def page_vehicle(self, page):
+        f = self.f
+        self.field(page, 'gearbits', 'Gearbits', f['gearbits'], ('spin', 0, 33000, 100), '0 - 33,000')
+        self.row(page, 'Last placed', f['placed'])
+        self.heading(page, 'Not proven on real figures', "Read-only: the checked vehicle doesn't prove them.")
+        self.row(page, 'Racing XP', f'{f["vehicle_xp_"]:,}', faint=True)
+        flags = f['vehicle_flags_']
+        self.row(page, 'Shield / weapon levels', f'{bin(flags & 0x1F).count("1")} / {bin(flags >> 5 & 0x1F).count("1")}', faint=True)
+        self.row(page, 'Decoration, topper, neon, shout ids', ', '.join(map(str, f['cosmetics_'])), faint=True)
+        self.row(page, 'Mods', f'performance {f["mods_"] & 15}, specialty {f["mods_"] >> 4 & 15}, horn {f["mods_"] >> 8 & 15}', faint=True)
+
+    def page_crystal(self, page):
+        f = self.f
+        if f['blank']:
+            return self.row(page, 'Imaginator', 'none created on this crystal yet')
+        self.heading(page, 'Not proven on real figures', "Read-only: the crystal layout isn't known for sure.")
+        self.row(page, 'Gold', f['money_'], faint=True)
+        self.row(page, 'Time on the portal', f'{f["time_"] // 3600} h', faint=True)
+        self.row(page, 'Last placed', f['placed_'], faint=True)
+
+    def page_figure(self, page):
+        from tkinter import ttk
+        ttk.Label(page, style='CardMuted.TLabel', wraplength=560, justify='left', text=(
+            'This figure has no save yet: put it in a game once, then its progress can be edited here.'
+            if self.f['kind'] == 'new' else 'Items, trophies and other toys keep no data that can be edited here.')).pack(anchor='w')
+
+    def page_hex(self, page):
+        import tkinter as tk
+        from tkinter import ttk
+        app = self.app
+        ttk.Label(page, style='CardFaint.TLabel', wraplength=640, justify='left', text=(
+            "Decrypted blocks. Blocks 0-7 and sector trailers (grey) can't be changed. The checksums of the "
+            'newest save are fixed when saving.')).pack(anchor='w', pady=(0, 6))
+        self.hex = tk.Text(page, font=('Consolas', 10), wrap='none', relief='flat', borderwidth=0, height=22,
+                           background=app.CARD, foreground=app.TEXT, insertbackground=app.TEXT, undo=True,
+                           highlightthickness=1, highlightbackground=app.LINE, highlightcolor=app.ACCENT,
+                           selectbackground=app.SELECTED, selectforeground=app.TEXT)
+        scroll = ttk.Scrollbar(page, command=self.hex.yview)
+        self.hex.configure(yscrollcommand=scroll.set)
+        scroll.pack(side='right', fill='y')
+        self.hex.pack(fill='both', expand=True)
+        self.hex.tag_configure('locked', foreground=app.FAINT)
+        plain = crypt(self.base)
+        self.hex_text = '\n'.join(f'{b:02x}   ' + plain[b * 16:b * 16 + 16].hex(' ') for b in range(64))
+        self.hex.insert('1.0', self.hex_text)
+        for b in range(64):
+            if b < 8 or b % 4 == 3:
+                self.hex.tag_add('locked', f'{b + 1}.0', f'{b + 1}.end')
+
+    def hex_plain(self):
+        """The Hex tab's image, or None when unchanged. ValueError for a malformed or locked line."""
+        if self.hex is None:
+            return None
+        text = self.hex.get('1.0', 'end-1c')
+        if text == self.hex_text:
+            return None
+        lines = [line for line in text.splitlines() if line.strip()]
+        if len(lines) != 64:
+            raise ValueError(f'The hex editor needs 64 lines, one per block (it has {len(lines)}).')
+        plain = bytearray()
+        for b, line in enumerate(lines):
+            try:
+                n, data = line.split(maxsplit=1)
+                block = bytes.fromhex(data)
+            except ValueError:
+                raise ValueError(f'Hex line {b + 1} is not "block  16 bytes".') from None
+            if int(n, 16) != b or len(block) != 16:
+                raise ValueError(f'Hex line {b + 1}: block {b:02x} must hold 16 bytes.')
+            plain += block
+        old = crypt(self.base)
+        if any(plain[b * 16:b * 16 + 16] != old[b * 16:b * 16 + 16] for b in range(64) if b < 8 or b % 4 == 3):
+            raise ValueError("Blocks 0-7 and sector trailers can't be changed.")
+        return bytes(plain)
+
+    def changes(self):
+        """The edits made in the form, checked against the game's limits. ValueError says what is wrong."""
+        f, v, out = self.f, {k: x.get() for k, x in self.vars.items()}, {}
+
+        def number(key, low, high, what):
+            n = int(v[key]) if v[key].strip().isdigit() else -1
+            if not low <= n <= high:
+                raise ValueError(what)
+            return n
+        if 'nickname' in v and v['nickname'] != f['nickname']:
+            if len(v['nickname']) > 15:
+                raise ValueError('A nickname has at most 15 letters.')
+            out['nickname'] = v['nickname']
+        if 'gold' in v and number('gold', 0, 65000, 'Gold goes from 0 to 65,000.') != f['gold']:
+            out['gold'] = int(v['gold'])
+        if 'level' in v and number('level', 1, 20, 'Levels go from 1 to 20.') != f['level']:
+            out['xp'] = LEVELS[int(v['level']) - 1]
+        if self.bits and not 600 <= f['id'] < 700:  # a Sensei's upgrades are read-only
+            up = sum(1 << b for b, x in enumerate(self.bits) if x.get()) | (f['upgrades'] & 0b11100000000000)
+            if up != f['upgrades']:
+                if not up & 1 and up & 0b111000010:
+                    raise ValueError('Path upgrades need a path: choose one first.')
+                if up & 3 != f['upgrades'] & 3 and self.path_fixed():
+                    raise ValueError("The path can't be switched while path upgrades are bought.")
+                out['upgrades'] = up
+        if 'gearbits' in v and number('gearbits', 0, 33000, 'Gearbits go from 0 to 33,000.') != f['gearbits']:
+            out['gearbits'] = int(v['gearbits'])
+        if 'villain' in v and f['villains'] and v['villain'] != VILLAINS.get(f['villains'][0][0]):
+            out['villain'] = next(i for i, name in VILLAINS.items() if name == v['villain'])
+        return out
+
+    def result(self):
+        """The image a save writes, or None when nothing changed. ValueError says what is wrong."""
+        plain = self.hex_plain()
+        if plain is not None:
+            if self.override or self.changes():
+                raise ValueError('Save the hex edits on their own: revert the other changes first.')
+            return fix_checksums(self.base, plain)
+        if self.override:
+            return self.override
+        changes = self.changes()
+        return edit(self.base, **changes) if changes else None
+
+    def max_out(self):
+        m = figure_fields(maxed(self.base))
+        for key in ('gold', 'level'):
+            if key in self.vars and m[key] is not None:
+                self.vars[key].set(m[key])
+        if self.bits and not 600 <= self.f['id'] < 700:  # maxed() keeps a Sensei's upgrades anyway
+            for bit, v in enumerate(self.bits):
+                v.set(bool(m['upgrades'] >> bit & 1))
+            self.path.set('bottom' if m['upgrades'] & 3 == 3 else 'top')
+            self.path_chosen()
+        self.note.configure(text='Maxed out here: save to keep it.')
+
+    def save(self):
+        from tkinter import messagebox
+        app, (kind, key, _), base = self.app, self.current, self.base
+        try:
+            new = self.result()
+            what = 'the hex edits' if self.hex_plain() is not None else ', '.join(self.changes())
+        except ValueError as e:
+            return messagebox.showerror('Edit figure', str(e), parent=self.w)
+        if new is None or new == base:
+            return self.note.configure(text='Nothing changed.')
+        if kind_of(new) != 'new' and figure_fields(new).get('damaged') and not self.f.get('damaged'):
+            return messagebox.showerror('Edit figure', 'These edits leave the save with wrong checksums, so the game '
+                                        'would call the figure damaged. Not saved.', parent=self.w)
+        name = f'{figure_name(base)} ({base[:4].hex()})'
+        warn = ("\n\nHex edits change raw save data. A wrong value can make the game reject the figure; the backup "
+                'is how to undo it.') if what == 'the hex edits' else ''
+        if not messagebox.askyesno('Edit figure', f'Write {what} to {name}? What it holds now is kept as a backup '
+                                   f'first.{warn}', icon='warning' if warn else 'question', parent=self.w):
+            return
+        if kind == 'real':
+            def make(held):  # what the figure holds now: refused when a game saved since the editor read it
+                if held != base:
+                    raise ValueError('the figure changed since the editor read it (a game save?): press Revert, then edit again')
+                return new
+            try:
+                job = app.mirror.write_image(key, make, f'edits ({what})')
+            except ValueError as e:
+                return messagebox.showerror('Not written', str(e), parent=self.w)
+            job.done = f'Wrote {what} to {name}.'  # said by restore_ended once every block is checked
+            app.say(f'Writing {what} to figure {key}…')
+            return self.w.destroy()
+        try:
+            with app.server.cv:
+                s = app.portal.slots[self.n]
+                if s.path != key or bytes(s.data) != base:
+                    raise ValueError('the game saved this figure since the editor read it: press Revert, then edit again')
+                save_dump(stamped(base, 'before edit'), base)
+                save_dump(key, new)
+                s.unsaved, s.attempt = None, 0
+                app.portal.remove(self.n)  # lifted and placed again: the game reads the edited figure
+                app.portal.load(new, key)
+        except (OSError, ValueError) as e:
+            return messagebox.showerror('Not saved', str(e), parent=self.w)
+        log(f'edited {os.path.basename(key)}: {what}')
+        app.say(f'Saved {what} to {os.path.basename(key)}.')
+        self.w.destroy()
 
 
 def shutdown(server, mirror, port, listener):

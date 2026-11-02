@@ -5,6 +5,7 @@ import threading
 import time
 from types import SimpleNamespace
 
+import glob
 import itertools
 import os
 import shutil
@@ -280,6 +281,281 @@ def restore_setup(d):
     with open(path, 'wb') as f:
         f.write(new)
     return server.portal, m, bytes(new), path
+
+
+def editing():
+    """The figure editor's code on the user's dumps (when there): intact saves seal to themselves, every proven
+    field edits on its own, Max out and Clone keep the save intact. And on a made-up Zook when there are none."""
+    figures = []
+    for path in sorted(glob.glob(os.path.join(glob.escape(os.path.join(pb.HERE, 'dumps')), '*.sky'))):
+        with open(path, 'rb') as f:
+            figures.append((os.path.basename(path), f.read()))
+    figures.append(('made-up Zook', saved_figure('1a2b3c4d')))
+    same_except = lambda a, b, *keys: {k for k in a if a[k] != b.get(k)} <= set(keys)
+    edited = 0
+    for name, data in figures:
+        f = pb.figure_fields(data)
+        assert f['name'] == pb.figure_name(data), name
+        if f['kind'] in ('skylander', 'vehicle', 'trap') and not f['damaged']:
+            assert pb.fix_checksums(data, pb.crypt(data)) == data, f'{name}: sealing an intact save changed it'
+        if f['kind'] == 'skylander' and not f['damaged']:
+            info = pb.figure_info(data)
+            assert (f['level'], f['gold'], f['nickname']) == (info.level, info.gold, info.nickname), name
+            up = f['upgrades'] ^ 0b100  # base upgrade 1 toggled
+            g = pb.figure_fields(pb.edit(data, upgrades=up))
+            assert (g['upgrades'], g['damaged']) == (up, False) and same_except(f, g, 'upgrades'), name
+            m = pb.figure_fields(pb.maxed(data))
+            full = 0b1011011101 if 1000 <= f['id'] < 3000 else 0b1111111101  # a Swapper half: 3 basic, 2 path upgrades
+            if 600 <= f['id'] < 700:  # a Sensei's upgrades stay as they are
+                full = f['upgrades']
+            assert not m['damaged'] and m['upgrades'] & full == full and m['upgrades'] & 2 == f['upgrades'] & 2, name
+            assert 600 <= f['id'] < 700 and m['upgrades'] == f['upgrades'] or not 600 <= f['id'] < 700, name
+            assert not 1000 <= f['id'] < 3000 or m['upgrades'] & 32 == f['upgrades'] & 32, name  # box 4 left alone
+            assert m['level'] in (None, 20) and m['gold'] in (None, 65000), name
+            c = pb.cloned(data)
+            assert c[:4] != data[:4] and pb.crc16(c[:0x1E]) == struct.unpack_from('<H', c, 0x1E)[0]
+            assert same_except(f, pb.figure_fields(c), 'uid'), name
+            edited += 1
+        if f['kind'] == 'vehicle':
+            g = pb.figure_fields(pb.edit(data, gearbits=f['gearbits'] + 100))
+            assert g['gearbits'] == f['gearbits'] + 100 and not g['damaged'] and same_except(f, g, 'gearbits'), name
+        if f['kind'] == 'trap':
+            other = 1 if f['villains'][0][0] != 1 else 2
+            g = pb.figure_fields(pb.edit(data, villain=other))
+            assert g['villains'][0][0] == other and g['villains'][1:] == f['villains'][1:] and not g['damaged'], name
+            assert pb.figure_info(pb.edit(data, villain=other)).villains[0] == pb.VILLAINS[other], name
+    assert edited >= 1
+    if pb.UPGRADE_NAMES:
+        assert pb.upgrade_names(19)['paths'] == ['Golden Frenzy', 'Golden Money Bags']  # confirmed by the user's figure
+        sw = pb.upgrade_names(1008)  # Hoot Loop (Bottom): the game shows box 1 as Portable Hole; box 4 has no wiki name
+        assert sw['basic'] == ['Portable Hole', 'Temporal Whack', 'Time Sink', ''] and sw['paths'] == ['Telekinesis', 'Escape Artist']
+    assert pb.upgrade_names(99999)['basic'] == [''] * 4
+
+
+def editor_window():
+    """The editor window: a .sky figure on the virtual portal is saved to its file (old copy kept) and placed again;
+    a real figure is written like a restore, and refused once a game changed it; bad values are refused."""
+    import tkinter as tk
+    from tkinter import messagebox
+    asked, errors = [], []
+    real_ask, real_error = messagebox.askyesno, messagebox.showerror
+    messagebox.askyesno = lambda *a, **k: asked.append(a) or True
+    messagebox.showerror = lambda title, msg, **k: errors.append(msg)
+    root = tk.Tk()
+    root.withdraw()
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            pb.DUMPS = d
+            fake_bin(d)
+            server = Server(Portal(DESC.r_reply), DESC)
+            said = []
+            m = pb.Mirror(server, vhci_bus=3)
+            app = SimpleNamespace(root=root, server=server, portal=server.portal, mirror=m, say=said.append, **pb.App.LIGHT)
+            zook = saved_figure('0a0b0c0d')
+            path = os.path.join(d, 'Zook (0a0b0c0d) - current.sky')
+            pb.save_dump(path, zook)
+            n = server.portal.load(zook, path)
+            e = pb.FigureEditor(app, n)
+            assert e.current == ('file', path, zook) and e.f['gold'] == 1234
+            e.vars['gold'].set('70000')
+            e.save()
+            assert errors == ['Gold goes from 0 to 65,000.']
+            e.vars['gold'].set('4321')
+            e.save()
+            with open(path, 'rb') as f:
+                saved = f.read()
+            assert pb.figure_fields(saved)['gold'] == 4321 and bytes(server.portal.slots[n].data) == saved
+            kept = [p for p in os.listdir(d) if 'before edit' in p]
+            assert len(kept) == 1 and open(os.path.join(d, kept[0]), 'rb').read() == zook
+            assert pb.REMOVING in server.portal.slots[n].queued  # lifted and placed: the game reads it again
+
+            held = saved_figure('86bc1263')
+            m.real = FakeReal({2: bytearray(held)})
+            m.poll()
+            v = m.slots[2][0]
+            e = pb.FigureEditor(app, v)
+            assert e.current[:2] == ('real', '86bc1263')
+            e.vars['nickname'].set('Forged')
+            e.save()
+            m.poll()  # the write job
+            job = m.finished.get_nowait()
+            assert job.state == 'completed' and job.done.startswith('Wrote nickname to Zook')
+            assert pb.figure_fields(bytes(m.real.figures[2]))['nickname'] == 'Forged'
+            e = pb.FigureEditor(app, v)
+            m.known[2][0x240:0x250] = bytes(16)  # a game save lands after the editor read the figure
+            e.vars['nickname'].set('Again')
+            e.save()
+            assert 'changed since the editor read it' in errors[-1]
+    finally:
+        messagebox.askyesno, messagebox.showerror = real_ask, real_error
+        root.destroy()
+
+
+def hex_tab():
+    """The editor's Hex tab: an edit in the newest save is written with its checksums fixed (the save stays intact,
+    the old copy is kept, a real figure is written like a restore); blocks 0-7, sector trailers, malformed lines and
+    hex mixed with form edits are refused, and nothing is written then."""
+    import tkinter as tk
+    from tkinter import messagebox
+    asked, errors = [], []
+    real_ask, real_error = messagebox.askyesno, messagebox.showerror
+    messagebox.askyesno = lambda *a, **k: asked.append(a) or True
+    messagebox.showerror = lambda title, msg, **k: errors.append(msg)
+    root = tk.Tk()
+    root.withdraw()
+
+    def put(e, block, data=None, lines=None):  # rewrite one line of the Hex tab (or all of it)
+        rows = e.hex.get('1.0', 'end-1c').splitlines()
+        if data is not None:
+            rows[block] = f'{block:02x}   ' + data.hex(' ')
+        e.hex.delete('1.0', 'end')
+        e.hex.insert('1.0', '\n'.join(lines if lines is not None else rows))
+
+    def refused(e, path, why):
+        before = open(path, 'rb').read()
+        e.save()
+        assert errors and why in errors[-1] and open(path, 'rb').read() == before, f'not refused ({why}): {errors[-1:]}'
+        e.load()  # Revert
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            pb.DUMPS = d
+            fake_bin(d)
+            server = Server(Portal(DESC.r_reply), DESC)
+            said = []
+            m = pb.Mirror(server, vhci_bus=3)
+            app = SimpleNamespace(root=root, server=server, portal=server.portal, mirror=m, say=said.append, **pb.App.LIGHT)
+            zook = saved_figure('0a0b0c0d')
+            path = os.path.join(d, 'Zook (0a0b0c0d) - current.sky')
+            pb.save_dump(path, zook)
+            n = server.portal.load(zook, path)
+            e = pb.FigureEditor(app, n)
+            plain = pb.crypt(zook)
+            assert e.hex_plain() is None and e.result() is None  # untouched
+
+            put(e, 1, bytes([0xFF]) * 16)  # block 1: the character id
+            refused(e, path, "Blocks 0-7 and sector trailers can't be changed.")
+            put(e, 11, bytes(16))  # a sector trailer
+            refused(e, path, "Blocks 0-7 and sector trailers can't be changed.")
+            put(e, 0, lines=e.hex.get('1.0', 'end-1c').splitlines()[:63])
+            refused(e, path, 'needs 64 lines')
+            rows = e.hex.get('1.0', 'end-1c').splitlines()
+            put(e, 0, lines=rows[:9] + ['09   zz'] + rows[10:])
+            refused(e, path, 'Hex line 10 is not')
+            put(e, 0, lines=rows[:9] + ['0a   ' + plain[0x90:0xA0].hex(' ')] + rows[10:])  # wrong block number
+            refused(e, path, 'block 09 must hold 16 bytes')
+            gold = bytearray(plain[0x80:0x90])
+            gold[3:5] = (4321).to_bytes(2, 'little')
+            put(e, 8, bytes(gold))
+            e.vars['nickname'].set('Mixed')
+            refused(e, path, 'Save the hex edits on their own')
+
+            put(e, 8, bytes(gold))  # gold 1234 -> 4321 in the newest main area, its checksums now wrong
+            e.save()
+            assert asked and 'Hex edits change raw save data' in asked[-1][1], errors[-1:]  # the extra warning
+            saved = open(path, 'rb').read()
+            f = pb.figure_fields(saved)
+            assert f['gold'] == 4321 and not f['damaged'] and not pb.figure_info(saved).damaged
+            assert saved[:128] == zook[:128] and bytes(server.portal.slots[n].data) == saved
+            assert [p for p in os.listdir(d) if 'before edit' in p] and said[-1] == 'Saved the hex edits to ' + os.path.basename(path) + '.'
+            assert pb.changed_blocks(pb.crypt(saved), plain) == [8]  # block 8 changed; its checksums live in it too
+
+            held = saved_figure('86bc1263')  # a real figure: written like a restore, every block checked
+            m.real = FakeReal({2: bytearray(held)})
+            m.poll()
+            e = pb.FigureEditor(app, m.slots[2][0])
+            block = bytearray(pb.crypt(held)[0x80:0x90])
+            block[3:5] = (999).to_bytes(2, 'little')
+            put(e, 8, bytes(block))
+            e.save()
+            m.poll()  # the write job
+            job = m.finished.get_nowait()
+            real = bytes(m.real.figures[2])
+            assert job.state == 'completed' and job.done == 'Wrote the hex edits to Zook (86bc1263).'
+            assert pb.figure_fields(real)['gold'] == 999 and not pb.figure_fields(real)['damaged'] and real[:128] == held[:128]
+    finally:
+        messagebox.askyesno, messagebox.showerror = real_ask, real_error
+        root.destroy()
+
+
+def upgrades_tab():
+    """The editor's Upgrades tab: the path can't be switched while path upgrades are bought (choosing one first, or
+    switching without them, still works); a Sensei's upgrades are read-only; a Swapper half shows no box 4 and keeps
+    its bit as it is."""
+    import tkinter as tk
+    from tkinter import messagebox
+    asked, errors = [], []
+    real_ask, real_error = messagebox.askyesno, messagebox.showerror
+    messagebox.askyesno = lambda *a, **k: asked.append(a) or True
+    messagebox.showerror = lambda title, msg, **k: errors.append(msg)
+    root = tk.Tk()
+    root.withdraw()
+
+    def as_figure(data, fid, var=0):  # the same save on another character: the key comes from the header
+        plain = bytearray(pb.crypt(data))
+        struct.pack_into('<HH', plain, 0x10, fid, 0)
+        struct.pack_into('<H', plain, 0x1C, var)
+        struct.pack_into('<H', plain, 0x1E, pb.crc16(plain[:0x1E]))
+        return pb.crypt(bytes(plain), encrypt=True)
+
+    def boxes(e, enabled=False):  # the variables of the checkboxes the tab shows (only the clickable ones)
+        out, todo = [], [e.w]
+        while todo:
+            w = todo.pop()
+            todo += w.winfo_children()
+            if w.winfo_class() == 'TCheckbutton' and not (enabled and w.instate(['disabled'])):
+                out.append(str(w.cget('variable')))
+        return out
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            pb.DUMPS = d
+            fake_bin(d)
+            server = Server(Portal(DESC.r_reply), DESC)
+            app = SimpleNamespace(root=root, server=server, portal=server.portal, mirror=None, say=lambda *a: None,
+                                  **pb.App.LIGHT)
+
+            def editor(data, name):
+                path = os.path.join(d, name)
+                pb.save_dump(path, data)
+                for n, s in enumerate(server.portal.slots):
+                    if s.path:
+                        server.portal.remove(n)  # one figure at a time
+                return pb.FigureEditor(app, server.portal.load(data, path)), path
+
+            zook = saved_figure('0a0b0c0d')
+            e, path = editor(pb.edit(zook, upgrades=0b1000001), 'Zook (0a0b0c0d) - current.sky')  # top path, its upgrade 1
+            assert e.path_fixed() and e.path.get() == 'top'
+            e.path.set('bottom')
+            e.path_chosen()  # as if the disabled button were clicked anyway
+            before = open(path, 'rb').read()
+            e.save()
+            assert "can't be switched" in errors[-1] and open(path, 'rb').read() == before
+
+            e, path = editor(pb.edit(zook, upgrades=0b1), 'Zook (0a0b0c0d) - current.sky')  # a path, nothing bought on it
+            assert not e.path_fixed()
+            e.path.set('bottom')
+            e.path_chosen()
+            e.save()
+            assert pb.figure_fields(open(path, 'rb').read())['upgrades'] & 3 == 3  # switched
+
+            sensei = as_figure(pb.edit(zook, upgrades=0b101000101), 601)  # King Pen
+            e, path = editor(sensei, 'King Pen (0a0b0c0d) - current.sky')
+            assert boxes(e) and not boxes(e, enabled=True)  # shown, none clickable
+            e.bits[3].set(True)
+            e.max_out()
+            assert e.changes().get('upgrades') is None  # read-only, Max out included
+            assert pb.figure_fields(pb.maxed(sensei))['upgrades'] == 0b101000101
+
+            half = as_figure(pb.edit(zook, upgrades=0b100100), 1008, 8192)  # Hoot Loop (Bottom): boxes 1 and 4
+            e, path = editor(half, 'Hoot Loop (Bottom) (0a0b0c0d) - current.sky')
+            assert str(e.bits[5]) not in boxes(e) and str(e.bits[2]) in boxes(e)
+            e.bits[3].set(True)  # buy upgrade 2
+            e.save()
+            up = pb.figure_fields(open(path, 'rb').read())['upgrades']
+            assert up & 0b111100 == 0b101100  # upgrade 2 bought, box 4 kept as it was
+            assert pb.figure_fields(pb.maxed(as_figure(zook, 1008, 8192)))['upgrades'] & 32 == 0  # Max out: 3 basic
+    finally:
+        messagebox.askyesno, messagebox.showerror = real_ask, real_error
+        root.destroy()
 
 
 def restore_retries():
@@ -1235,8 +1511,29 @@ def setup_checking():
         pb.portal_pnp = real
 
 
+def methods_exist():
+    """Every self.name the window classes use is defined or assigned somewhere: a merge once dropped App.set_volume,
+    which App.__init__ calls, and no test opens the window. Upper-case names are the colour palette (set at start)."""
+    import ast
+    tree = ast.parse(open(pb.__file__, encoding='utf-8').read())
+    for c in (n for n in tree.body if isinstance(n, ast.ClassDef)):
+        have = {m.name for m in c.body if isinstance(m, ast.FunctionDef)}
+        have |= {t.id for m in c.body if isinstance(m, ast.Assign) for t in m.targets if isinstance(t, ast.Name)}
+        used = set()
+        for n in ast.walk(c):
+            if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == 'self':
+                (have if isinstance(n.ctx, ast.Store) else used).add(n.attr)
+        missing = sorted(u for u in used - have if not u.isupper() and not u.startswith('__'))
+        assert not missing, f'{c.name} uses undefined {missing}'
+
+
 def main():
+    methods_exist()
     reading(pb.figure_info)
+    editing()  # these need the real figure_info
+    editor_window()
+    hex_tab()
+    upgrades_tab()
     setup_checking()
     extras()
     updating()

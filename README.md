@@ -13,7 +13,7 @@ PortalSync creates a *virtual* portal over USB/IP. Every figure you place on the
 - **Your progress stays on your figures:** game saves are written back to the real figure, and every block is checked.
 - **Backups of every figure**, a daily backup zip, and a pop-up to put newer progress back when a figure is behind its copy. A **SAVE** column shows whether each save has reached the figure.
 - **See inside your figures:** level, gold, nickname, the villain inside a Trap Team trap, and each Skylander's **progress history**.
-- **Repair a damaged figure.** That's the one the game rejects with "A toy on the portal has a problem". You can also edit gold, nickname and level, or reset a figure to new.
+- **Repair a damaged figure.** That's the one the game rejects with "A toy on the portal has a problem". A **figure editor** changes gold, level, nickname, upgrades and path, a trap's villain or a vehicle's gearbits, and shows the raw blocks too.
 - **Trap Team sound** on the Traptanium Portal's own speaker, and the **portal lights** follow the game.
 - **Start your games from PortalSync**, a **Settings** page, a **welcome window**, **dark mode**, and **updates in one click**.
 
@@ -138,12 +138,30 @@ First try **Settings… → Check setup…**. It checks usbip-win2, the portal a
 - **Backups:** right-click a figure → **Backups…** lists its backups, newest first, with level, gold, nickname and how each compares with the figure ("more progress: level 12 (the figure: 11)"). **Put on figure** writes one onto the real figure, and says which way it goes before it does.
 - **Restore progress:** when a figure you place is behind its saved copy, a pop-up offers to write that progress onto the figure. It says whether the backup has more or less progress than the figure. What the figure held is kept as its backup, so a restore can be undone.
 - **Damaged saves:** when a figure's newest save fails its checksum, the game says "A toy on the portal has a problem". PortalSync warns you as soon as such a figure is placed and offers a **repair** that keeps all its progress.
-- **Right-click a figure:** **Unload**, **Replace with…** (a figure from a file swaps for another one in the same window), and **Progress history…**. For a figure on the real portal also these, each written like a restore: backup first, then every block checked.
-  - **Edit gold, nickname, level…**: up to level 20, saved the way the game saves, with the previous save kept as its fallback.
+- **Right-click a figure:**
+  - **Edit figure…** opens the figure editor (below).
+  - **Compare with…** puts the figure side by side with one of its backups or another loaded figure, differences highlighted.
+  - **Clone as a new figure** copies it under a new ID into `dumps`, to play from the virtual portal (Add Skylander lists it).
+  - **Unload**, **Replace with…** (a figure from a file swaps for another one in the same window), and **Progress history…**.
+  - For a figure on the real portal also these, each written like a restore: backup first, then every block checked.
   - **Repair damaged save…**
   - **Reset to a new figure…**: like a toy fresh out of the box.
   - **Restore progress…**
 - **Back up all figures** into one zip.
+
+### Figure editor
+
+Right-click a figure → **Edit figure…**. It works on figures on the real portal and on `.sky` figures from your PC.
+
+- **Stats:** nickname, gold (0-65,000) and level (1-20). Play time, dates, the consoles the figure was used on and the last game that saved it are shown too.
+- **Upgrades:** the path by its name and every upgrade by its name, from the Skylanders Wiki. Swap Force halves show the wiki's 3 basic upgrades. The path can't be switched while path upgrades are bought, and a Sensei's upgrades are read-only, because Imaginators stores them another way.
+- **Trap:** the villain in the trap, and the ones it caught before. **Vehicle:** gearbits (0-33,000).
+- **Hex:** the decrypted blocks, for anything else. The checksums are fixed when saving.
+- **Max out:** level 20, 65,000 gold and every upgrade, filled in for you to save.
+
+Only values proven on real figures can be changed; the others (vehicle mods, Creation Crystals) are shown read-only. [docs/FIGURE_FORMAT.md](docs/FIGURE_FORMAT.md) lists every field and how it was checked, and `verify_layout.py` checks it against your `dumps`.
+
+Nothing is written until you press **Write to figure** (or **Save**). A real figure is written like a restore: its backup first, every block checked. A `.sky` figure keeps its old copy as `… - before edit <time>.sky` and is placed again, so the game reads the change. A save is refused when the game saved the figure after the editor read it.
 
 ### Sound and lights
 
@@ -224,6 +242,8 @@ Your figures, the log and your settings stay on your PC (`dumps\`, `portalsync.l
 - The portal protocol and the figure list come from [Dolphin](https://github.com/dolphin-emu/dolphin) (`Source/Core/Core/IOS/USB/Emulated/Skylanders/`), cross-checked with [RPCS3](https://github.com/RPCS3/rpcs3) and [Cemu](https://github.com/cemu-project/Cemu).
 - [usbip-win2](https://github.com/vadimgrn/usbip-win2) provides the virtual USB controller.
 - The Imaginators variant IDs and the Creation Crystal IDs come from [Skylander-IDs](https://github.com/Texthead1/Skylander-IDs).
+- The figure editor's field offsets come from the format notes of [Runes](https://github.com/NefariousTechSupport/Runes) and from Dolphin, each checked on real figures (no Runes code or tables are included).
+- Upgrade and path names come from the [Skylanders Wiki](https://skylanders.fandom.com) (CC-BY-SA 3.0), in `upgrade_names.json` (made by `tools/fetch_upgrade_names.py`).
 
 ## License
 
