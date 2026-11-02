@@ -80,10 +80,14 @@ First try **Settings… → Check setup…**. It checks usbip-win2, the portal a
 
 | | |
 | --- | --- |
+| ![The figure editor](docs/editor.png) | ![The figure editor's Upgrades tab](docs/editor_upgrades.png) |
+| **Edit figure**: nickname, gold and level, with the figure's history. | **Upgrades**: the path and every upgrade by its name. |
+| ![Compare figures](docs/compare.png) | |
+| **Compare with…**: a figure next to one of its backups, differences highlighted. | |
 | ![Add a Skylander: your figures with level, gold and villain](docs/add.png) | ![All Skylanders, filtered on Trap Team](docs/collection.png) |
 | **Add Skylander**: your figures, with level, gold and the villain in a trap. | **All Skylanders**: 591 figures, filtered by game, element and what you have. |
 | ![Teams](docs/teams.png) | ![Right-click a figure](docs/menu.png) |
-| **Teams**: save the figures on the portal and load them back in one click. | **Right-click a figure**: unload, replace, progress history, backups, edit, repair, reset or restore. |
+| **Teams**: save the figures on the portal and load them back in one click. | **Right-click a figure**: edit, compare, clone, unload, replace, progress history, backups, repair, reset or restore. |
 | ![Progress history](docs/history.png) | ![The restore pop-up](docs/restore.png) |
 | **Progress history**: a figure's level and gold over time. | **Restore**: put newer progress back on a figure, one figure at a time. |
 | ![Backups](docs/backups.png) | ![Edit a team](docs/team_edit.png) |

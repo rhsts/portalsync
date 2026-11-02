@@ -4987,7 +4987,8 @@ class FigureEditor:
             if fixed and value != self.path.get():
                 r.state(['disabled'])
         if fixed and not sensei:
-            self.row(page, '', 'The path stays while path upgrades are bought: how the game moves them is not known yet.')
+            ttk.Label(page, style='CardFaint.TLabel', text='The path stays while path upgrades are bought: how the game '
+                      'moves them is not known yet.').grid(row=page.grid_size()[1], column=0, columnspan=3, sticky='w')
         self.heading(page, 'Upgrades', 'Names from the Skylanders Wiki, in its order.' if n['page'] else '')
         self.path_boxes = []
         for bit in range(2, 11):
