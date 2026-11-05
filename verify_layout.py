@@ -9,7 +9,7 @@ import re
 import struct
 import sys
 
-import portalsync as ps  # noqa: E402  (figure_info and the checksums: an independent check of figure_fields)
+import figure as fig  # noqa: E402  (figure_info and the checksums: an independent check of figure_fields)
 
 
 def raw_a(a, st):
@@ -54,14 +54,14 @@ def main(folder):
         name = os.path.basename(path)
         data = open(path, 'rb').read()
         fid = struct.unpack_from('<H', data, 0x10)[0]
-        info = ps.figure_info(data)
-        d = ps.crypt(data)
-        a, b = ps.newest(d, 0x80, 0x240, 9), ps.newest(d, 0x110, 0x2D0, 2)
+        info = fig.figure_info(data)
+        d = fig.crypt(data)
+        a, b = fig.newest(d, 0x80, 0x240, 9), fig.newest(d, 0x110, 0x2D0, 2)
         if info.kind == 'trap':  # type 3 of a trap covers 0x110 struct bytes from 0x40 (all villain slots)
-            check(struct.unpack_from('<H', d, a + 0x0A)[0] == ps.crc16(struct_bytes(d, a, 0x40, 0x110)), f'{name}: trap checksum')
+            check(struct.unpack_from('<H', d, a + 0x0A)[0] == fig.crc16(struct_bytes(d, a, 0x40, 0x110)), f'{name}: trap checksum')
             continue
         if 3200 <= fid < 3300 and any(data[0x80:0x90]):  # SuperChargers vehicle: same checksums as a Skylander
-            check(all(s == c for s, c in ps.area_checksums(d, a)), f'{name}: vehicle checksums')
+            check(all(s == c for s, c in fig.area_checksums(d, a)), f'{name}: vehicle checksums')
             check(u(d, raw_b(b, 0x78), 2) <= 33000, f'{name}: gearbits over 33000')
             continue
         if info.kind != 'skylander' or info.damaged:

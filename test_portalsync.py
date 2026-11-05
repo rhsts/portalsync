@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 
+import figure as fg
 import portalsync as pb
 from portalsync import Portal, Server, recv_exact
 
@@ -325,7 +326,7 @@ def editing():
             assert g['villains'][0][0] == other and g['villains'][1:] == f['villains'][1:] and not g['damaged'], name
             assert pb.figure_info(pb.edit(data, villain=other)).villains[0] == pb.VILLAINS[other], name
     assert edited >= 1
-    if pb.UPGRADE_NAMES:
+    if fg.UPGRADE_NAMES:
         assert pb.upgrade_names(19)['paths'] == ['Golden Frenzy', 'Golden Money Bags']  # confirmed by the user's figure
         sw = pb.upgrade_names(1008)  # Hoot Loop (Bottom): the game shows box 1 as Portable Hole; box 4 has no wiki name
         assert sw['basic'] == ['Portable Hole', 'Temporal Whack', 'Time Sink', ''] and sw['paths'] == ['Telekinesis', 'Escape Artist']
@@ -1103,7 +1104,7 @@ def saved_figure(uid, level_xp=(33000, 10203), gold=1234, nickname='raf'):
     d[a + 0x20:a + 0x20 + 2 * len(nickname)] = nickname.encode('utf-16-le')
     struct.pack_into('<H', d, 0x110 + 3, level_xp[1])
     d[0x112] = 1
-    pb.seal(d, a, 0x110)  # checksum types 1-3, and 6 for the second area
+    fg.seal(d, a, 0x110)  # checksum types 1-3, and 6 for the second area
     return pb.crypt(bytes(d), encrypt=True)
 
 
@@ -1170,12 +1171,12 @@ def reading(figure_info):
     fixed = pb.figure_info(pb.repaired(broken))
     assert not fixed.damaged and (fixed.level, fixed.gold, fixed.nickname) == (11, 1234, 'raf')
     for level in (1, 10, 11, 15, 20):
-        e = pb.figure_info(pb.edited(good, gold=65000, nickname='Zooky', level=level))
+        e = pb.figure_info(fg.edited(good, gold=65000, nickname='Zooky', level=level))
         assert (e.level, e.gold, e.nickname, e.damaged, e.old_damaged) == (level, 65000, 'Zooky', False, False)
-    e = pb.crypt(pb.edited(good, gold=5))
+    e = pb.crypt(fg.edited(good, gold=5))
     assert e[0x240 + 9] == 2 and struct.unpack_from('<H', e, 0x243)[0] == 5  # new save in the older area
     assert struct.unpack_from('<H', e, 0x83)[0] == 1234  # the previous save is still there
-    assert pb.figure_info(pb.edited(good, gold=5)).level == 11  # untouched fields stay
+    assert pb.figure_info(fg.edited(good, gold=5)).level == 11  # untouched fields stay
 
     # volume: 16-bit samples scaled and clipped
     sound = pb.PortalSound(speaker=lambda block: played.append(block) or True)
@@ -1527,7 +1528,15 @@ def methods_exist():
         assert not missing, f'{c.name} uses undefined {missing}'
 
 
+def figure_alone():
+    """figure.py stands on its own: importing it loads no portal, window or PortalSync code (step 1 of the split)."""
+    code = "import sys, figure; print([m for m in ('portalsync', 'tkinter', 'usb', 'socket') if m in sys.modules])"
+    out = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, cwd=os.path.dirname(pb.__file__))
+    assert out.stdout.strip() == '[]', out.stdout + out.stderr
+
+
 def main():
+    figure_alone()
     methods_exist()
     reading(pb.figure_info)
     editing()  # these need the real figure_info
