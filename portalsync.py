@@ -7,7 +7,8 @@ Copyright (C) 2026 rhsts. SPDX-License-Identifier: GPL-2.0-or-later (see LICENSE
 Dumps are named after the character and the figure's ID, e.g. dumps/Zook (86bc1263) - current.sky:
   current               the copy the game plays on; game saves land here
   loaded copy           what you play when you load a backup by hand (the backup is never written)
-and one backup per figure, the newest; a new one sends the older one to the Recycle Bin:
+and its backups: 'original' always, and of the others the newest (Settings: up to 10); a new one sends the older one
+to the Recycle Bin:
   original              the first read of the real figure
   saved <time>          a current copy that differed from the figure when it was placed again
   before restore <time> what the figure held just before a restore wrote to it
@@ -81,6 +82,7 @@ DESC_FILE = os.path.join(HERE, 'portal_descriptors.json')
 DUMPS = os.path.join(HERE, 'dumps')
 SETTINGS = os.path.join(HERE, 'settings.json')
 UNSAVED = os.path.join(os.environ.get('LOCALAPPDATA') or HERE, 'PortalSync', 'unsaved')  # Portal.rescue's copies
+UNFINISHED = os.path.join(os.path.dirname(UNSAVED), 'unfinished restores.json')  # Mirror.unfinished, kept across restarts
 THUMBS = os.path.join(HERE, 'thumbnails')  # optional pictures for Add Skylander, '<id>_<variant>.png', added by the user  # choices made in the window, kept between runs
 VID, PID = 0x1430, 0x0150
 HOST, TCP_PORT, BUSID = '127.0.0.1', 3240, '1-1'
@@ -124,6 +126,16 @@ class Slot:
         self.path = None  # dump file that game writes are saved to
         self.unsaved = None  # error of the last failed save: the progress is only in data (Portal.save)
         self.attempt, self.due = 0, 0  # failed saves in a row, time.monotonic() of the next retry
+
+    def occupied(self):
+        """A figure is in this slot: its status once the game has seen every queued one. status alone says REMOVING
+        or REMOVED for a moment after a figure was swapped in (remove() then load(): restore, edit, replace)."""
+        return (self.queued[-1] if self.queued else self.status) & 1
+
+    def writable(self):
+        """The game may write it: present, with no removal still owed to the game. Until the game has seen that
+        removal, a write is the rest of a save it made for the figure that was here before."""
+        return self.status & 1 and REMOVING not in self.queued
 
 
 def unsaved_state(s):
@@ -312,8 +324,18 @@ def progress_history(uid):
     return [r for k, r in enumerate(found) if k == 0 or r[1:] != found[k - 1][1:]]
 
 
+def has_recycle_bin(path):
+    """False on drives Windows deletes from without a Recycle Bin: USB sticks, network shares (and unknown ones)."""
+    root = os.path.splitdrive(os.path.abspath(path))[0] + '\\'
+    return ctypes.windll.kernel32.GetDriveTypeW(root) == 3  # DRIVE_FIXED
+
+
 def recycle(path):
-    """Move a file to the Recycle Bin, never a permanent delete. True when it is gone from its folder."""
+    """Move a file to the Recycle Bin, never a permanent delete. True when it is gone from its folder; False
+    (the file kept) on a drive without a Recycle Bin."""
+    if not has_recycle_bin(path):
+        log(f'{os.path.basename(path)} kept: its drive has no Recycle Bin')
+        return False
     from ctypes import wintypes as w
 
     class SHFILEOPSTRUCTW(ctypes.Structure):
@@ -321,8 +343,9 @@ def recycle(path):
                     ('fFlags', ctypes.c_ushort), ('fAnyOperationsAborted', w.BOOL),
                     ('hNameMappings', ctypes.c_void_p), ('lpszProgressTitle', w.LPCWSTR)]
 
-    # FO_DELETE with FOF_ALLOWUNDO (Recycle Bin) | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
-    op = SHFILEOPSTRUCTW(wFunc=3, pFrom=os.path.abspath(path) + '\0', fFlags=0x40 | 0x10 | 0x04 | 0x400)
+    # FO_DELETE with FOF_ALLOWUNDO (Recycle Bin) | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI |
+    # FOF_WANTNUKEWARNING (asks instead of deleting for good: bin off or too small for the file)
+    op = SHFILEOPSTRUCTW(wFunc=3, pFrom=os.path.abspath(path) + '\0', fFlags=0x40 | 0x10 | 0x04 | 0x400 | 0x4000)
     ok = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op)) == 0 and not op.fAnyOperationsAborted
     return ok and not os.path.exists(path)
 
@@ -333,7 +356,7 @@ BACKUPS_KEPT = 1  # backups per figure (Settings), the newest intact ones
 def keep_one_backup(uid, keep=None):
     """At most BACKUPS_KEPT backups per figure: keep `keep` (default: the newest whose save is not damaged, else
     the existing files are all preserved) and the next newest intact ones, and move the others to the Recycle
-    Bin. An invalid `keep` is ignored."""
+    Bin. An invalid `keep` is ignored. 'original', the first read of the figure, always stays as well."""
     paths = backups(uid).get(uid, [])
     if not keep or keep not in paths or damaged(keep):
         keep = next((p for p in reversed(paths) if not damaged(p)), None)
@@ -342,15 +365,36 @@ def keep_one_backup(uid, keep=None):
     keepers = {os.path.normcase(keep)} | {os.path.normcase(p) for p in [p for p in reversed(paths)
                                           if p != keep and not damaged(p)][:BACKUPS_KEPT - 1]}
     for path in paths:
-        if os.path.normcase(path) not in keepers:
+        if os.path.normcase(path) not in keepers and not path.endswith(' - original.sky'):
             gone = recycle(path)
             log(f'{os.path.basename(path)} ' + ('moved to the Recycle Bin' if gone else 'NOT moved to the Recycle Bin, kept')
                 + f'; the backup is {os.path.basename(keep)}')
 
 
-def stamped(data, kind):
-    """dump_path with the time added, never an existing file: 'Zook (86bc1263) - saved 2026-10-10 12.57.04.sky'."""
-    return fresh_name(dump_path(data, time.strftime(f'{kind} %Y-%m-%d %H.%M.%S'))[:-4])
+def same_lineage(figure, left, game):
+    """The figure holds only what PortalSync left on it and blocks of the game's copy: a write-back that stopped
+    part-way (lifted mid-save; its last block may have reached the figure without its read-back), so the game's
+    copy can finish it. Any other block means it was played elsewhere."""
+    return left is not None and len(game) == 1024 and all(
+        figure[o:o + 16] in (left[o:o + 16], game[o:o + 16]) for o in range(0, 1024, 16))
+
+
+def unfinished_restores():
+    """Mirror.unfinished as the last run left it: {uid: (before-restore snapshot, what the figure held when its
+    restore stopped, or None)}, only snapshots still in dumps/. Their figures' backups are not pruned at start."""
+    try:
+        with open(UNFINISHED) as f:
+            found = {uid: (os.path.join(DUMPS, name), held and bytes.fromhex(held)) for uid, (name, held) in json.load(f).items()}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
+    return {uid: entry for uid, entry in found.items() if os.path.exists(entry[0])}
+
+
+def stamped(data, kind, folder=None):
+    """dump_path with the time added, never an existing file: 'Zook (86bc1263) - saved 2026-10-10 12.57.04.sky'.
+    folder: another folder than dumps/ for it."""
+    path = dump_path(data, time.strftime(f'{kind} %Y-%m-%d %H.%M.%S'))
+    return fresh_name(os.path.join(folder or DUMPS, os.path.basename(path))[:-4])
 
 
 def rename_old_dumps():
@@ -396,8 +440,19 @@ def fresh_name(stem):
     return path
 
 
+def same_folder(a, b):
+    """a and b name one folder: same path, or (both existing) the same folder by another path."""
+    a, b = os.path.abspath(a), os.path.abspath(b)
+    try:
+        return os.path.normcase(a) == os.path.normcase(b) or os.path.samefile(a, b)
+    except OSError:
+        return False  # one of them does not exist (yet)
+
+
 def move_dumps(src, dst):
     """Move every .sky from folder src to folder dst (Settings: dumps folder); a name already there gets -2."""
+    if same_folder(src, dst):
+        return 0  # one folder under two names (junction, mapped drive): moving would rename every file to -2
     os.makedirs(dst, exist_ok=True)
     moved = 0
     for name in os.listdir(src) if os.path.isdir(src) else []:
@@ -413,6 +468,12 @@ def save_dump(path, data):
     with open(tmp, 'wb') as f:
         f.write(data)
     os.replace(tmp, path)  # never leave a half-written dump
+
+
+def save_settings(prefs):
+    with open(SETTINGS + '.tmp', 'w') as f:
+        json.dump(prefs, f)
+    os.replace(SETTINGS + '.tmp', SETTINGS)  # never a half-written file
 
 
 def is_backup(path):
@@ -516,7 +577,7 @@ class Portal:
         if not 0 <= n < 16 or not 0 <= block < 64 or len(data) != 16:
             return bytes(32)
         s = self.slots[n]
-        if s.status & 1:
+        if s.writable():
             s.data[block * 16:block * 16 + 16] = data
             if s.path:
                 self.save(s)
@@ -578,7 +639,7 @@ class Portal:
         serial = int.from_bytes(data[0:4], 'little')
         found = None
         for i, s in enumerate(self.slots):
-            if not s.status & 1:
+            if not s.occupied():
                 if s.last_id == serial:
                     found = i
                     break
@@ -595,7 +656,7 @@ class Portal:
         if s.unsaved is not None and isinstance(self.rescue(s), OSError):
             return False  # its progress could go nowhere: the figure stays loaded so it isn't lost
         s.path = None
-        if s.status & READY:
+        if s.occupied():
             s.status = REMOVING
             s.queued += (REMOVING, REMOVED)
             return True
@@ -1032,18 +1093,29 @@ class Mirror:
         self.present = set()  # real slots with a figure on them, from the last poll
         self.stopping = False  # stop() sets it at exit: no new work, reads end (RealPortal.cancelled), run() ends
         self.thread = None  # main() starts run() in it
-        self.unfinished = {}  # uid -> before-restore snapshot of an incomplete restore: stays a backup (place())
+        # uid -> (before-restore snapshot, what the figure held when it stopped) of an incomplete restore: the
+        # snapshot stays a backup (place(), main()), also after a restart (keep_unfinished)
+        self.unfinished = unfinished_restores()
+        self.restoring = None  # the restore job being written now (App.close asks first)
         self.state = 'real portal: looking'
         server.portal.on_command = self.on_command
 
     def run(self):
+        import traceback
+        last = None
         while not self.stopping:
             try:
                 self.poll()
-            except OSError as e:  # unplugged, taken by another program, or any USB error
+            except Exception as e:  # OSError: unplugged, taken by another program, or any USB error
                 if self.stopping:
                     break  # the cancelled read, not a lost portal; stop() lets go of it
-                self.lost(e)
+                if not isinstance(e, OSError) and traceback.format_exc() != last:  # a bug or odd reply: the thread
+                    last = traceback.format_exc()  # lives on and claims the portal again (logged once)
+                    log(f'real portal thread: unexpected error, handled like a lost portal:\n{last}')
+                try:
+                    self.lost(e)
+                except Exception:  # e.g. pyusb's NoBackendError in portal_devices()
+                    log(f'real portal thread: {traceback.format_exc()}')
                 time.sleep(1)
 
     def lost(self, e):
@@ -1139,11 +1211,24 @@ class Mirror:
             log('backed up', os.path.basename(dump_path(data, 'original')))
         path = dump_path(data, 'current')  # game writes land here (and on the figure if write-back is on)
         with self.server.cv:
+            own = {(x, p) for x, p, _ in self.slots.values()} | {self.kept.get(uid)}  # the Mirror's own copies
+            for n, s in enumerate(self.server.portal.slots):  # the same figure loaded from a file: the real one
+                if s.path and bytes(s.data[:4]).hex() == uid and (n, s.path) not in own:  # takes its place
+                    name = os.path.basename(s.path)
+                    self.server.portal.remove(n)
+                    if s.path:  # Portal.remove kept it loaded: its unsaved progress could go nowhere
+                        raise OSError(f'its copy from {name} is loaded and could not be saved')
+                    log(f'real slot {i}: {uid} was loaded from {name}; the real figure takes its place')
             self.known[i] = bytearray(data)  # what the real figure holds right now
             v, kept_path = self.kept.pop(uid, (None, None))
+            # not same: it was played elsewhere while away. Never sync over it: the path below keeps the game copy
+            # as a saved backup and offers it
+            same = v is not None and same_lineage(data, self.left.get(uid), self.server.portal.slots[v].data)
+            if v is not None and not same and self.server.portal.slots[v].path == kept_path:
+                self.server.portal.remove(v)
             if v is not None and self.server.portal.slots[v].path == kept_path:
                 self.slots[i] = (v, path, uid)
-                n = self.queue_sync(i) if self.write_back else 0
+                n = self.queue_sync(i) if self.write_back and same else 0
                 changed = sum(self.server.portal.slots[v].data[b * 16:b * 16 + 16] != data[b * 16:b * 16 + 16]
                               for b in range(64))
                 log(f'real slot {i}: {uid} back, still in virtual slot {v + 1}'
@@ -1156,15 +1241,17 @@ class Mirror:
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 previous = f.read()
-            if previous != data and self.write_back and self.left.get(uid) == data and not figure_info(previous).damaged:
-                # The figure is exactly as PortalSync left it, so the difference is only game saves that did
-                # not reach it (lifted mid-write, 2026-10-11): finish them like write-back would have.
+            bad = damaged(path)  # a 0-byte or stray file too (power loss): figure_info needs 1024 bytes
+            if previous != data and self.write_back and not bad and same_lineage(data, self.left.get(uid), previous):
+                # The figure is as PortalSync left it, but for blocks of this very save, so the difference is only
+                # game saves that did not reach it (lifted mid-write, 2026-10-11): finish them like write-back
+                # would have.
                 catch_up = data = previous
             elif previous != data:  # progress the real figure does not have: keep it, never overwrite
                 old = stamped(data, 'saved')
                 os.replace(path, old)
                 log(f'{os.path.basename(path)} differed from the real figure; kept as {os.path.basename(old)}')
-                if figure_info(previous).damaged:  # never offer to write a save the game would refuse
+                if bad:  # never offer to write a save the game would refuse
                     log(f'{os.path.basename(old)}: its newest save is damaged, so it is not offered for restore')
                     if prune:
                         keep_one_backup(uid)  # keeps an intact backup if there is one
@@ -1182,7 +1269,7 @@ class Mirror:
             return
         log(f'real slot {i} -> virtual slot {v + 1}: {uid}'
             + (f'; writing {n} block(s) the game saved that did not reach the figure' if n else ''))
-        if figure_info(figure).damaged:
+        if not catch_up and figure_info(figure).damaged:  # a half-written save the catch-up is finishing is no damage
             name = figure_name(figure)
             log(f'real slot {i}: the save on {name} ({uid}) is damaged; the game will say "A toy on the portal has a problem"')
             self.repairs.put(uid)  # the window offers a repair, which keeps the progress, instead of a backup
@@ -1209,8 +1296,10 @@ class Mirror:
         with self.server.cv:
             self.write_epoch += 1
             self.retries.clear()
-            for v, path, uid in self.slots.values():
+            for i, (v, path, uid) in self.slots.items():
                 self.kept[uid] = (v, path)
+                if i in self.known:  # like remove(): place() tells a figure played elsewhere meanwhile
+                    self.left[uid] = bytes(self.known[i])
             self.slots.clear()
             self.known.clear()
         self.cancel_pending_restores('the real portal was unplugged or lost')  # the window says so
@@ -1254,7 +1343,7 @@ class Mirror:
             n, block = buf[1] & 0xF, buf[2]
             s = self.server.portal.slots[n]
             real = next((i for i, (v, path, uid) in self.slots.items() if v == n and s.path == path), None)
-            if real is not None:  # else: not a figure on the connected real portal
+            if real is not None and s.writable():  # else: not a figure on the connected real portal, or refused
                 self.queue_block(real, block, bytes(buf[3:19]))
 
     def queue_block(self, i, block, data):  # cv held
@@ -1276,6 +1365,15 @@ class Mirror:
         for b in blocks:
             self.queue_block(i, b, bytes(game[b * 16:b * 16 + 16]))
         return len(blocks)
+
+    def unsynced(self, uid):
+        """How many data blocks the game saved for figure uid that are not on the real figure: write-back is off, or
+        still writing. Anything written onto the figure now (restore, edit, repair, reset) sets that progress aside.
+        ponytail: only the copy loaded in the virtual portal is looked at, not an unloaded current.sky."""
+        with self.server.cv:
+            return next((len(changed_blocks(self.server.portal.slots[v].data, self.known[i]))
+                         for i, (v, path, u) in self.slots.items()
+                         if u == uid and i in self.known and self.server.portal.slots[v].path == path), 0)
 
     def figure_data(self, uid):
         """What the figure uid on the real portal holds (read on placement, updated by writes), or None."""
@@ -1395,13 +1493,28 @@ class Mirror:
             job.state = 'incomplete' if job.written else 'cancelled'
         else:
             job.state = 'completed' if job.written == job.total else 'incomplete'
-        if job.state == 'incomplete' and job.snapshot:
-            self.unfinished[job.uid] = job.snapshot  # half-written figure: its snapshot stays a backup (place())
-        elif job.state == 'completed':
-            self.unfinished.pop(job.uid, None)
+        if job.state == 'incomplete' and job.snapshot:  # half-written figure: its snapshot stays a backup (place())
+            self.unfinished[job.uid] = (job.snapshot, self.figure_data(job.uid))
+            self.keep_unfinished()
+        elif job.state == 'completed' and self.unfinished.pop(job.uid, None):
+            self.keep_unfinished()
         log(f'restore {job.uid} from {job.name}: {job.state}, {job.written} of {job.total} block(s) written and verified'
             + (f' ({job.message})' if job.message else ''))
         self.finished.put(job)
+
+    def keep_unfinished(self):
+        """Write self.unfinished for the next start: closing mid-restore must not prune its snapshot then."""
+        try:
+            os.makedirs(os.path.dirname(UNFINISHED), exist_ok=True)
+            save_dump(UNFINISHED, json.dumps({uid: [os.path.basename(path), held and held.hex()]
+                                              for uid, (path, held) in self.unfinished.items()}).encode())
+        except OSError as e:
+            log(f'{UNFINISHED} not written ({e}): after a restart the unfinished restore\'s backup may be pruned')
+
+    def restore_running(self):
+        """True while a restore job is queued or being written: closing now would leave a figure half-written."""
+        with self.jobs.mutex:
+            return self.restoring is not None or any(job[0] == 'restore' for job in self.jobs.queue)
 
     def holds(self, i, uid):  # Mirror thread
         try:
@@ -1425,7 +1538,9 @@ class Mirror:
             job.message = f'another figure is in real slot {i}'
             return self.finish(job)
         try:  # files only in here: an OSError is a file problem, not a lost portal
-            job.snapshot = job.snapshot or self.unfinished.get(uid)  # after an incomplete one: keep its snapshot
+            snapshot, halfway = self.unfinished.get(uid, (None, None))
+            if job.snapshot is None and halfway == held:  # still exactly as an incomplete one left it: its snapshot
+                job.snapshot = snapshot  # is what the figure held; any other state is saved now
             if job.snapshot is None:  # a retry keeps the first one: the figure is half-written now
                 job.snapshot = stamped(held, 'before restore')
                 save_dump(job.snapshot, held)
@@ -1435,12 +1550,16 @@ class Mirror:
                 portal = self.server.portal
                 game = portal.slots[v]
                 here = game.path == mirror
-                if not here and all(s.status & 1 for s in portal.slots):
+                if not here and all(s.occupied() for s in portal.slots):
                     job.message = 'the virtual portal is full'
                     return self.finish(job)
-                if here and bytes(game.data) != data and changed_blocks(game.data, held):
+                copy = bytes(game.data) if here else None
+                if not here and os.path.exists(mirror):  # unloaded: its progress is in the file save_dump replaces
+                    with open(mirror, 'rb') as f:
+                        copy = f.read()
+                if copy is not None and copy != data and (len(copy) != 1024 or changed_blocks(copy, held)):
                     kept = stamped(held, 'saved')
-                    save_dump(kept, bytes(game.data))  # unsynced game progress: recoverable from the Recycle Bin
+                    save_dump(kept, copy)  # unsynced game progress: recoverable from the Recycle Bin
                     log(f'restore {uid}: the game copy had progress the figure lacks; saved as {os.path.basename(kept)}')
                 save_dump(mirror, data)
                 if here:  # the restored file supersedes unsaved game bytes (kept above): remove() must not
@@ -1509,7 +1628,7 @@ class Mirror:
             return False
         v, path, current_uid = self.slots[i]
         game = self.server.portal.slots[v]
-        return (current_uid == uid and game.path == path and game.status & 1
+        return (current_uid == uid and game.path == path and game.occupied()
                 and game.data[block * 16:block * 16 + 16] == data)
 
     def run_write(self, args, attempt=1):  # Mirror thread; never hold cv during hardware I/O
@@ -1548,17 +1667,20 @@ class Mirror:
             elif job[0] == 'restore':
                 with self.server.cv:
                     self.clear_retries(job[1].uid)  # explicit restore supersedes older automatic retries
+                self.restoring = job[1]
                 try:
                     self.restore_now(job[1])
                 except (ValueError, TimeoutError) as e:  # figure moved mid-read
                     if job[1].state == 'running':
                         job[1].message = f'{e}'
                         self.finish(job[1])
-                except OSError as e:  # portal lost: lost() takes over, the window still hears how far it got
+                except Exception as e:  # portal lost (or a bug): run() takes over, the window still hears how far it got
                     if job[1].state == 'running':
                         job[1].message = f'the real portal stopped answering ({e})'
                         self.finish(job[1])
                     raise
+                finally:
+                    self.restoring = None
             else:
                 self.run_write(job[1:])
         if self.stopping:
@@ -1716,15 +1838,18 @@ def newer(tag, current=VERSION):
 
 
 def latest_release():
-    """(tag, page url, zip url or None) of the latest GitHub release, or None when it can't be reached."""
+    """(tag, page url, zip url, the zip's 'sha256:…' digest as GitHub lists it, its .sig's url; each None when the
+    release has none) of the latest GitHub release, or None when it can't be reached."""
     import urllib.request
     try:
         req = urllib.request.Request(RELEASES, headers={'User-Agent': f'PortalSync/{VERSION}'})
         with urllib.request.urlopen(req, timeout=10) as r:
             j = json.load(r)
-        zips = [a['browser_download_url'] for a in j.get('assets', [])
-                if re.fullmatch(r'PortalSync-v[\d.]+\.zip', a.get('name', ''))]
-        return j['tag_name'], j['html_url'], (zips or [None])[0]
+        assets = {a.get('name', ''): a for a in j.get('assets', [])}
+        name = next((n for n in assets if re.fullmatch(r'PortalSync-v[\d.]+\.zip', n)), None)
+        zipped, sig = assets.get(name, {}), assets.get(f'{name}.sig', {})
+        return (j['tag_name'], j['html_url'], zipped.get('browser_download_url'), zipped.get('digest'),
+                sig.get('browser_download_url'))
     except (OSError, ValueError, KeyError) as e:
         log(f'update check: {e}')
         return None
@@ -1761,15 +1886,42 @@ OPTIONAL_FILES = ('README.md', 'LICENSE', 'upgrade_names.json')  # nothing else 
 UPDATE_MAX = 200 * 1024 * 1024  # the download, and all files unpacked together
 UPDATE_FILE_MAX = 100 * 1024 * 1024  # one file unpacked
 UPDATE_JOURNAL = 'update-journal.json'  # exists only while files are being swapped (see recover_update)
+# The release signing key's public half (X and Y of an ECDSA P-256 key, hex), printed by tools/sign_release.py keygen.
+# With it set, install_update takes only a zip signed with that key (the release asset <zip>.sig): every release
+# needs its .sig (python tools/sign_release.py <key file> <zip>). Were it empty, a download would only be checked
+# against the SHA-256 GitHub lists for it: that catches a damaged or swapped download, not a release someone else
+# published on the account.
+UPDATE_KEY = 'e54af529a25211b90a9bd76ab90feef082131e9273edf26f2c6c5203bd9e56e1eedf653fa35f3dc2aa0cc2344bf5f8043fdf2fd8321b11a2b044170e5ac052d2'
 
 
-def install_update(url, folder=None):
-    """Put the files of a release zip next to PortalSync.exe, all or none. Only REQUIRED_FILES and OPTIONAL_FILES
-    are taken, checked before anything is written. Files in use (PortalSync.exe itself, portal_hide.dll in a running
-    emulator) can be renamed but not overwritten, so every new file is written as <name>.new first; then, with
-    UPDATE_JOURNAL written, each old file becomes <name>.old (recycled at the next start) and each new one takes its
-    place. Any failure puts the old files back. Returns the names of the files put in place."""
-    import io, urllib.request, zipfile, zlib
+def signed_by(key, digest, signature):
+    """True when signature (64 bytes: r, s) is the ECDSA P-256 signature of digest (a SHA-256) by the key whose
+    public half is key (64 bytes: X, Y). Windows checks it (bcrypt.dll), as it does the figures' AES."""
+    bc = ctypes.WinDLL('bcrypt')
+    alg, h = ctypes.c_void_p(), ctypes.c_void_p()
+    if len(key) != 64 or len(signature) != 64 or bc.BCryptOpenAlgorithmProvider(ctypes.byref(alg), 'ECDSA_P256', None, 0):
+        return False
+    try:
+        blob = struct.pack('<II', 0x31534345, 32) + key  # BCRYPT_ECCKEY_BLOB: 'ECS1' (a public P-256 key), key size
+        if bc.BCryptImportKeyPair(alg, None, 'ECCPUBLICBLOB', ctypes.byref(h), blob, len(blob), 0):
+            return False
+        try:
+            return bc.BCryptVerifySignature(h, None, digest, len(digest), signature, len(signature), 0) == 0
+        finally:
+            bc.BCryptDestroyKey(h)
+    finally:
+        bc.BCryptCloseAlgorithmProvider(alg, 0)
+
+
+def install_update(url, folder=None, digest=None, sig_url=None):
+    """Put the files of a release zip next to PortalSync.exe, all or none. The download must be the file the release
+    lists (digest: its 'sha256:…', from latest_release) and, with UPDATE_KEY set, signed with the release key
+    (sig_url). Only REQUIRED_FILES and OPTIONAL_FILES are taken, checked before anything is written. Files in use
+    (PortalSync.exe itself, portal_hide.dll in a running emulator) can be renamed but not overwritten, so every new
+    file is written as <name>.new first; then, with UPDATE_JOURNAL written, each old file becomes <name>.old
+    (recycled at the next start) and each new one takes its place. Any failure puts the old files back. Returns the
+    names of the files put in place."""
+    import hashlib, io, urllib.request, zipfile, zlib
     folder = folder or HERE
     if not url.startswith(DOWNLOADS):
         raise ValueError(f'not a PortalSync release: {url}')
@@ -1778,6 +1930,17 @@ def install_update(url, folder=None):
         data = r.read(UPDATE_MAX + 1)
     if len(data) > UPDATE_MAX:
         raise ValueError(f'the update download is larger than {UPDATE_MAX // 2**20} MB')
+    sha = hashlib.sha256(data).digest()
+    if digest != 'sha256:' + sha.hex():
+        raise ValueError('the update download is not the file the release lists (its SHA-256 differs)')
+    if UPDATE_KEY:
+        if not (sig_url or '').startswith(DOWNLOADS):
+            raise ValueError('the release has no signature for its zip')
+        req = urllib.request.Request(sig_url, headers={'User-Agent': f'PortalSync/{VERSION}'})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            signature = r.read(65)
+        if not signed_by(bytes.fromhex(UPDATE_KEY), sha, signature):
+            raise ValueError('the update is not signed with the PortalSync release key')
     try:
         z = zipfile.ZipFile(io.BytesIO(data))
         found = {}
@@ -2257,7 +2420,7 @@ class App:
             ttk.Button(header, text='Start game…', style='Accent.TButton', command=self.open_games).grid(
                 row=0, column=3, rowspan=2, sticky='e', padx=(8, 0))
         self.update_link = ttk.Label(header, style='Link.TLabel', cursor='hand2')  # shown by refresh()
-        self.new_version = None  # (tag, url), set by the update check thread
+        self.new_version = None  # latest_release()'s tuple, set by the update check thread
         self.updating, self.update_done = False, queue.Queue()  # update_now's thread puts (tag, names or error)
         if self.settings().get('check_updates', True):
             threading.Thread(target=lambda: setattr(self, 'new_version', (latest_release() or (None,))), daemon=True).start()
@@ -2345,8 +2508,14 @@ class App:
         self.drop_proc = accept_drops(int(root.wm_frame(), 16), lambda paths: [self.dropped.put(p) for p in paths])
 
     def close(self):
-        """The window's X: ask first while progress is only in memory (main()'s shutdown tries once more, then rescues)."""
+        """The window's X: ask first while progress is only in memory (main()'s shutdown tries once more, then rescues)
+        or a figure is being written (shutdown stops that half-way)."""
         from tkinter import messagebox
+        if self.mirror and self.mirror.restore_running() and not messagebox.askyesno(
+                'PortalSync', 'A figure on the real portal is being written right now. Closing stops that half-way: '
+                'the figure is left with part old, part new progress (what it held before stays as its backup). '
+                'Close anyway?', parent=self.root):
+            return
         with self.server.cv:
             n = sum(s.unsaved is not None for s in self.portal.slots)
         if not n or messagebox.askyesno('PortalSync', f'{n} figure(s) are not saved to disk yet. Close anyway? '
@@ -2839,7 +3008,7 @@ class App:
                 f'Write {n} block(s) from {name} to figure {uid}?\n\n'
                 'This replaces the progress on the figure. What the figure holds now becomes its backup '
                 f'("... ({uid}) - before restore <time>.sky"); its older backup goes to the Recycle Bin.'),
-                icon='warning', parent=self.dialog):
+                icon='warning', parent=self.dialog) or not self.unsynced_ok(uid, self.dialog):
             return
         try:
             self.mirror.restore(path)
@@ -3606,7 +3775,8 @@ class App:
                        'inside the figures folder. The last 7 are kept; older ones go to the Recycle Bin.')
 
             r = label('Backups per figure', help='How many older copies of each figure are kept. The newest intact '
-                                                 'ones stay; older ones go to the Recycle Bin.')
+                                                 'ones stay; older ones go to the Recycle Bin. The first copy '
+                                                 '("original") always stays as well.')
             kept = tk.StringVar(value=str(self.settings().get('backups', 1)))
 
             def set_kept(*_):
@@ -3624,8 +3794,9 @@ class App:
                 'Pick another folder (for example on OneDrive) and they move there on the next start.'))
 
             def set_folder(*_):
-                path = os.path.normpath(folder.get().strip().strip('"')) if folder.get().strip() else ''
-                if not path or os.path.normcase(path) == os.path.normcase(DUMPS):
+                typed = folder.get().strip().strip('"')  # a relative path is in the app folder, not the CWD
+                path = os.path.normpath(os.path.join(HERE, typed)) if typed else ''
+                if not path or same_folder(path, DUMPS):
                     self.remember(dumps=DUMPS, dumps_move_from=None)
                 else:
                     self.remember(dumps=path, dumps_move_from=DUMPS)
@@ -3858,7 +4029,7 @@ class App:
         n = next(iter(map(int, self.tree.selection())), None)
         with self.server.cv:
             s = self.portal.slots[n] if n is not None else None
-            return (n, bytes(s.data)) if s is not None and s.path and s.status & 1 else None
+            return (n, bytes(s.data)) if s is not None and s.path and s.occupied() else None
 
     def edit_figure(self):
         picked = self.selected_slot()
@@ -3899,7 +4070,7 @@ class App:
                 others.append((os.path.basename(path)[:-4], data))
         with self.server.cv:
             others += [(f'{figure_name(s.data)} (slot {i + 1})', bytes(s.data)) for i, s in enumerate(self.portal.slots)
-                       if s.path and s.status & 1 and i != picked[0]]
+                       if s.path and s.occupied() and i != picked[0]]
         if not others:
             return self.say(f'Nothing to compare {figure_name(mine)} with: no other copy and no other figure loaded.')
         d = tk.Toplevel(self.root)
@@ -4106,7 +4277,7 @@ class App:
             if not messagebox.askyesno('Put backup on figure?', (
                     f'Put the backup "{values[0]}" on {name}?\n\nThe figure now: {stats(now_info)[3:] or "—"}\n'
                     f'After this: {stats(info)[3:] or "—"}\n\nWhat the figure holds now is kept as a backup, so this can '
-                    'be undone here.'), icon='warning', parent=d):
+                    'be undone here.'), icon='warning', parent=d) or not self.unsynced_ok(uid, d):
                 return
             try:
                 self.mirror.restore(path)
@@ -4236,7 +4407,7 @@ class App:
         from tkinter import messagebox
         if self.updating:  # one at a time
             return
-        tag, page, url = (self.new_version + (None, None))[:3]
+        tag, page, url, digest, sig_url = (self.new_version + (None,) * 4)[:5]
         if not getattr(sys, 'frozen', False) or not url:
             return __import__('webbrowser').open(page)
         if not messagebox.askyesno('Update PortalSync', f'Install PortalSync {tag.lstrip("v")} and restart?\n\n'
@@ -4247,7 +4418,7 @@ class App:
 
         def work():  # off the Tk thread, so no Tk here: refresh() hands the result to finish_update
             try:
-                self.update_done.put((tag, install_update(url)))
+                self.update_done.put((tag, install_update(url, digest=digest, sig_url=sig_url)))
             except Exception as e:
                 self.update_done.put((tag, e))
         threading.Thread(target=work, daemon=True).start()
@@ -4289,8 +4460,28 @@ class App:
         data = self.mirror.figure_data(uid)
         return uid, data, figure_name(data)
 
+    def unsynced_ok(self, uid, parent=None):
+        """Asked right before anything is written onto figure uid. False when the game's copy has saves the figure
+        lacks (Mirror.unsynced) and the user would rather keep them: the write sets that copy aside."""
+        from tkinter import messagebox
+        n = self.mirror.unsynced(uid)
+        if not n:
+            return True
+        off = not self.mirror.write_back
+        return messagebox.askyesno('Unsaved game progress', (
+            f'The game has saved progress for this figure that is not on the figure yet ({n} block(s): '
+            + ('"Write saves to real figures" is off' if off else 'still being written') + ').\n\n'
+            'Writing now replaces that progress. A copy is set aside as "... - saved <time>.sky", which '
+            + ('stays as a backup.' if BACKUPS_KEPT > 1 else 'goes to the Recycle Bin (you keep 1 backup per figure).')
+            + '\n\nTo keep it, choose No and '
+            + ('turn on "Write saves to real figures" in Settings first.' if off else
+               'wait until SAVE says "✓ Saved to figure".') + '\n\nWrite anyway?'),
+            icon='warning', default='no', parent=parent or self.root)
+
     def write(self, uid, make, what, done):
         from tkinter import messagebox
+        if not self.unsynced_ok(uid):
+            return
         try:
             job = self.mirror.write_image(uid, make, what)
         except ValueError as e:
@@ -4331,11 +4522,25 @@ class App:
     def remember(self, **values):
         """Save choices into settings.json, keeping the others. Read first: opening the file for writing empties
         it, and reading inside the open wiped every other choice (until 2026-10-17)."""
-        merged = {**self.settings(), **values}
         try:
-            with open(SETTINGS + '.tmp', 'w') as f:
-                json.dump(merged, f)
-            os.replace(SETTINGS + '.tmp', SETTINGS)  # never a half-written file
+            with open(SETTINGS, encoding='utf-8-sig') as f:  # not settings(): its {} on an error would wipe the rest
+                old = json.load(f)
+            if not isinstance(old, dict):
+                raise ValueError('not a JSON object')
+        except FileNotFoundError:
+            old = {}
+        except ValueError as e:  # broken (hand-edited): kept aside once, then a fresh file
+            broken = SETTINGS + time.strftime('.broken-%Y-%m-%d %H.%M.%S')
+            log(f'settings.json does not parse ({e}): kept as {os.path.basename(broken)}')
+            try:
+                os.replace(SETTINGS, broken)
+            except OSError as e:
+                return log(f'choice not remembered: {e}')
+            old = {}
+        except OSError as e:  # could not be read just now: writing would lose the other choices
+            return log(f'choice not remembered: {e}')
+        try:
+            save_settings({**old, **values})
         except OSError as e:
             log(f'choice not remembered: {e}')
 
@@ -4415,7 +4620,7 @@ class App:
                 f'Erase all progress on {name}{stats(figure_info(data))}?\n\n'
                 'It becomes a figure fresh out of the box: the game asks for a name and it starts again at '
                 'level 1. What it holds now is kept as its backup ("before restore"), so "Restore progress…" '
-                'can undo this.'), icon='warning', parent=self.root):
+                'can undo this.'), icon='warning', parent=self.root) or not self.unsynced_ok(uid):
             return
         try:
             self.mirror.reset(uid)
@@ -4456,7 +4661,7 @@ class FigureEditor:
         app = self.app
         with app.server.cv:
             s = app.portal.slots[self.n]
-            if not s.path or not s.status & 1:
+            if not s.path or not s.occupied():
                 return None
             uid = next((u for v, path, u in (app.mirror.slots.values() if app.mirror else ()) if v == self.n and path == s.path), None)
             if uid is None:
@@ -4802,6 +5007,9 @@ class FigureEditor:
                                    f'first.{warn}', icon='warning' if warn else 'question', parent=self.w):
             return
         if kind == 'real':
+            if not app.unsynced_ok(key, self.w):
+                return
+
             def make(held):  # what the figure holds now: refused when a game saved since the editor read it
                 if held != base:
                     raise ValueError('the figure changed since the editor read it (a game save?): press Revert, then edit again')
@@ -4818,7 +5026,7 @@ class FigureEditor:
                 s = app.portal.slots[self.n]
                 if s.path != key or bytes(s.data) != base:
                     raise ValueError('the game saved this figure since the editor read it: press Revert, then edit again')
-                save_dump(stamped(base, 'before edit'), base)
+                save_dump(stamped(base, 'before edit', os.path.dirname(key)), base)  # beside it: not a figure in dumps/
                 save_dump(key, new)
                 s.unsaved, s.attempt = None, 0
                 app.portal.remove(self.n)  # lifted and placed again: the game reads the edited figure
@@ -4885,11 +5093,12 @@ def main():
     if prefs.get('dumps_move_from'):  # the figures folder was changed in Settings
         n = move_dumps(prefs['dumps_move_from'], DUMPS)
         log(f'{n} figure file(s) moved from {prefs["dumps_move_from"]} to {DUMPS}')
-        with open(SETTINGS, 'w') as f:
-            json.dump({**prefs, 'dumps_move_from': None}, f)
+        save_settings({**prefs, 'dumps_move_from': None})
     rename_old_dumps()
+    unfinished = unfinished_restores()
     for uid in backups():
-        keep_one_backup(uid)
+        if uid not in unfinished:  # closed mid-restore: its before-restore snapshot stays until a restore completes
+            keep_one_backup(uid)
     try:
         recover_update()  # first: while its journal exists, the .old files are the version to go back to
     except (OSError, ValueError, KeyError) as e:

@@ -3,10 +3,13 @@ import builtins
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import portalsync as pb
 from test_portalsync import DESC, FakeReal, saved_figure
+
+REAL_RECYCLE = pb.recycle  # setUp swaps it for a fake
 
 
 class SaveSafetyTests(unittest.TestCase):
@@ -16,6 +19,7 @@ class SaveSafetyTests(unittest.TestCase):
         self.now = 0.0
         self.recycled = []
         self.enterContext(patch.object(pb, 'DUMPS', self.temp.name))
+        self.enterContext(patch.object(pb, 'UNFINISHED', os.path.join(self.temp.name, 'unfinished restores.json')))
         self.enterContext(patch.object(pb, 'log'))
         self.enterContext(patch.object(pb, 'recycle', side_effect=self.recycle))
         self.enterContext(patch.object(pb.time, 'monotonic', side_effect=lambda: self.now))
@@ -44,6 +48,12 @@ class SaveSafetyTests(unittest.TestCase):
 
     def write(self, portal, value, block=5):
         portal.command(bytes([ord('W'), 0x10, block]) + bytes([value]) * 16)
+
+    @staticmethod
+    def game_polls(portal):
+        """The game reads status reports until it has seen every figure lifted and placed."""
+        while any(s.queued for s in portal.slots):
+            portal.status()
 
     def test_empty_backup_cannot_replace_valid_original(self):
         old, new = self.backups(b'')
@@ -232,6 +242,249 @@ class SaveSafetyTests(unittest.TestCase):
                 self.assertFalse(m.write_verified(0, block, data, self.uid))
             write.assert_not_called()
         self.assertEqual(bytes(portal.slots[0].data), self.image)
+
+    def holding(self, block, value):
+        """Every file in the temp folder (dumps, recycled ones too) whose block holds value."""
+        return [n for n in os.listdir(self.temp.name) if n.endswith(('.sky', '.recycled'))
+                and open_bytes(os.path.join(self.temp.name, n))[block * 16:block * 16 + 16] == bytes([value]) * 16]
+
+    def test_restore_after_incomplete_one_snapshots_new_progress(self):
+        portal, m = self.mirror()
+        m.real.fail = {6: 99}
+        older = bytearray(self.image)
+        older[80:96], older[96:112] = bytes([1]) * 16, bytes([2]) * 16
+        pb.save_dump(os.path.join(pb.DUMPS, 'older.sky'), older)
+        first = m.restore(os.path.join(pb.DUMPS, 'older.sky'))
+        m.poll()
+        m.real.fail = {}
+        self.assertEqual(first.state, 'incomplete')
+        self.game_polls(portal)
+        self.write(portal, 0x77, block=9)  # new progress, written back to the figure
+        m.poll()
+        self.assertEqual(m.real.figures[0][144:160], bytes([0x77]) * 16)
+        reset = m.reset(self.uid)
+        m.poll()
+        self.assertEqual(reset.state, 'completed')
+        self.assertNotEqual(reset.snapshot, first.snapshot)
+        self.assertTrue(self.holding(9, 0x77))  # the progress before the reset is a backup (or in the bin)
+
+    def test_short_current_copy_and_unexpected_errors_keep_mirror_alive(self):
+        server = pb.Server(pb.Portal(DESC.r_reply), DESC)
+        m = pb.Mirror(server, 3)
+        m.real = FakeReal({0: bytearray(self.image)})
+        pb.save_dump(pb.dump_path(self.image, 'original'), self.image)
+        pb.save_dump(pb.dump_path(self.image, 'current'), b'')  # 0-byte file after a power loss
+        m.poll()
+        self.assertEqual(open_bytes(server.portal.slots[0].path), self.image)
+        polls = []
+        def poll():
+            polls.append(1)
+            if len(polls) == 1:
+                raise IndexError('short report')
+            m.stopping = True
+        with patch.object(m, 'poll', side_effect=poll), patch.object(pb, 'portal_devices', return_value=[]), \
+                patch.object(pb.time, 'sleep'):
+            m.run()  # returns instead of dying on the IndexError
+        self.assertEqual(len(polls), 2)
+
+    def test_restore_onto_unloaded_figure_keeps_game_progress(self):
+        portal, m = self.mirror()
+        m.set_write_back(False)
+        self.write(portal, 9)  # progress only in current.sky
+        with m.server.cv:
+            portal.remove(0)  # right-click Unload
+        other = bytearray(self.image)
+        other[96:112] = bytes([7]) * 16
+        path = os.path.join(pb.DUMPS, 'other.sky')
+        pb.save_dump(path, other)
+        m.restore(path)
+        m.poll()
+        self.assertTrue([n for n in self.holding(5, 9) if ' - saved ' in n])
+
+    def test_kept_figure_played_elsewhere_is_not_overwritten(self):
+        portal, m = self.mirror()
+        real = m.real
+        with patch.object(pb, 'portal_devices', return_value=[]):
+            m.lost(OSError('unplugged'))  # the figure stays loaded (kept)
+        real.figures[0][96:112] = bytes([0x55]) * 16  # played on a console meanwhile
+        m.real, m.fresh = real, True
+        m.poll()
+        m.poll()
+        self.assertEqual(real.figures[0][96:112], bytes([0x55]) * 16)
+        self.assertTrue([n for n in self.holding(6, 0) if ' - saved ' in n])  # the game copy is a backup...
+        self.assertEqual(m.offers.qsize(), 1)  # ... offered for restore
+
+    def test_unfinished_restore_snapshot_survives_restart(self):
+        portal, m = self.mirror()
+        m.real.fail = {5: 99}
+        older = bytearray(self.image)
+        older[80:96], older[96:112] = bytes([1]) * 16, bytes([2]) * 16
+        pb.save_dump(os.path.join(pb.DUMPS, 'older.sky'), older)
+        job = m.restore(os.path.join(pb.DUMPS, 'older.sky'))
+        self.assertTrue(m.restore_running())  # App.close asks first
+        m.poll()
+        self.assertEqual(job.state, 'incomplete')
+        self.assertFalse(m.restore_running())
+        figure = m.real.figures[0]
+        # restart: main() prunes all but the unfinished one, then the figure is placed again
+        for uid in pb.backups():
+            if uid not in pb.unfinished_restores():
+                pb.keep_one_backup(uid)
+        m2 = pb.Mirror(pb.Server(pb.Portal(DESC.r_reply), DESC), 3)
+        m2.real = FakeReal({0: figure})
+        m2.poll()
+        self.assertTrue(os.path.exists(job.snapshot))
+        self.assertEqual(open_bytes(job.snapshot), self.image)
+
+    def test_recycle_never_deletes_on_drive_without_recycle_bin(self):
+        path = os.path.join(pb.DUMPS, 'old.zip')
+        pb.save_dump(path, b'zip')
+        with patch.object(pb, 'has_recycle_bin', return_value=False), \
+                patch.object(pb.ctypes.windll.shell32, 'SHFileOperationW') as op:
+            self.assertFalse(REAL_RECYCLE(path))
+        op.assert_not_called()
+        self.assertTrue(os.path.exists(path))
+
+    def test_unreadable_settings_are_never_overwritten(self):
+        settings = os.path.join(self.temp.name, 'settings.json')
+        self.enterContext(patch.object(pb, 'SETTINGS', settings))
+        app = type('A', (), {'settings': staticmethod(pb.App.settings)})()
+        with open(settings, 'w') as f:
+            f.write('{"teams": {"Air": []}, "write_back": true,}')  # trailing comma
+        pb.App.remember(app, volume=80)
+        broken = [n for n in os.listdir(self.temp.name) if n.startswith('settings.json.broken-')]
+        self.assertEqual(len(broken), 1)
+        self.assertIn(b'"teams"', open_bytes(os.path.join(self.temp.name, broken[0])))
+        with open(settings, 'w') as f:
+            f.write('{"teams": {"Air": []}}')
+        with patch.object(builtins, 'open', side_effect=PermissionError('locked')):
+            pb.App.remember(app, volume=10)  # a read error: nothing written
+        pb.App.remember(app, volume=20)
+        self.assertEqual(pb.App.settings(), {'teams': {'Air': []}, 'volume': 20})
+
+    def test_same_folder_under_another_path_is_not_moved(self):
+        name = 'Zook (86bc1263) - current.sky'
+        pb.save_dump(os.path.join(pb.DUMPS, name), self.image)
+        with patch.object(pb.os.path, 'samefile', return_value=True):  # a junction / mapped drive / 8.3 name
+            self.assertEqual(pb.move_dumps(pb.DUMPS, pb.DUMPS + '-link'), 0)
+        self.assertEqual(os.listdir(pb.DUMPS), [name])
+        self.assertFalse(os.path.exists(pb.DUMPS + '-link'))
+
+    def test_before_edit_copy_stays_beside_a_file_outside_dumps(self):
+        with tempfile.TemporaryDirectory() as other:
+            before = pb.stamped(self.image, 'before edit', other)
+            self.assertEqual(os.path.dirname(before), other)
+            self.assertIn(' - before edit ', os.path.basename(before))
+        self.assertEqual(os.path.dirname(pb.stamped(self.image, 'saved')), pb.DUMPS)
+
+    def test_game_write_after_a_swap_is_refused_until_the_game_saw_it(self):
+        portal, m = self.mirror()
+        self.game_polls(portal)
+        other = bytearray(self.image)
+        other[96:112] = bytes([7]) * 16
+        path = os.path.join(pb.DUMPS, 'other.sky')
+        pb.save_dump(path, other)
+        job = m.restore(path)
+        write = m.real.write_block
+
+        def mid_restore(i, block, data):  # the game was saving: its next block arrives while the restore writes
+            self.write(portal, 0xEE, block=9)
+            write(i, block, data)
+        m.real.write_block = mid_restore
+        m.poll()
+        m.poll()
+        self.assertEqual(job.state, 'completed')
+        self.assertEqual(bytes(m.real.figures[0]), bytes(other))  # no block of the old save on the restored figure
+        self.assertEqual(bytes(portal.slots[0].data), bytes(other))
+        self.assertEqual(portal.queries[-1][:3], bytes([ord('W'), 0x01, 9]))  # the game was told it failed
+        m.real.write_block = write
+        self.game_polls(portal)  # it saw the figure lifted and placed: its saves count again
+        self.write(portal, 0x44, block=9)
+        m.poll()
+        self.assertEqual(m.real.figures[0][144:160], bytes([0x44]) * 16)
+
+    def test_slot_awaiting_its_figure_is_not_free(self):
+        portal = pb.Portal(DESC.r_reply)
+        a, b, c = (saved_figure(uid) for uid in ('0a0a0a0a', '0b0b0b0b', '0c0c0c0c'))
+        portal.load(a, 'a.sky')
+        portal.activate()
+        self.game_polls(portal)
+        portal.remove(0)
+        self.assertEqual(portal.load(b, 'b.sky'), 0)
+        portal.status()  # the game hears REMOVING: the status alone says the slot is empty
+        self.assertEqual(portal.load(c, 'c.sky'), 1)
+        self.assertEqual(portal.slots[0].path, 'b.sky')
+
+    def test_figure_lifted_mid_save_is_caught_up_not_repaired(self):
+        portal, m = self.mirror()
+        new = pb.edit(self.image, gold=4321)  # a game save: a few blocks into the older area, valid checksums
+        write, landed = m.real.write_block, []
+
+        def lifted(i, block, data):  # the first block reaches the figure, its read-back does not
+            if not landed:
+                landed.append(block)
+                write(i, block, data)
+            raise TimeoutError('lifted')
+        m.real.write_block = lifted
+        for b in pb.changed_blocks(new, self.image):
+            portal.command(bytes([ord('W'), 0x10, b]) + new[b * 16:b * 16 + 16])
+        m.poll()
+        half = m.real.figures.pop(0)
+        self.assertTrue(pb.figure_info(bytes(half)).damaged)  # a half-written save
+        m.poll()  # lifted
+        m.real.write_block = write
+        m.real.figures[0] = half
+        m.poll()  # placed again: the game's copy finishes the save
+        m.poll()
+        self.assertEqual(bytes(m.real.figures[0]), new)
+        self.assertTrue(m.repairs.empty() and m.offers.empty())
+        self.assertEqual(self.recycled, [])
+
+    def test_real_figure_takes_the_place_of_its_file_copy(self):
+        current = pb.dump_path(self.image, 'current')
+        pb.save_dump(current, pb.edit(self.image, gold=1))
+        pb.save_dump(pb.dump_path(self.image, 'original'), self.image)
+        server = pb.Server(pb.Portal(DESC.r_reply), DESC)
+        m = pb.Mirror(server, 3)
+        path, data = pb.open_dump(current)
+        server.portal.load(data, path)  # Add Skylander → Load current
+        m.real = FakeReal({0: bytearray(self.image)})
+        m.poll()
+        loaded = [s for s in server.portal.slots if s.path]
+        self.assertEqual(len(loaded), 1)  # not the same figure twice, both on current.sky
+        self.assertEqual(bytes(loaded[0].data), self.image)
+        self.assertEqual(m.offers.qsize(), 1)  # the file copy's progress: a backup, offered for restore
+
+    def test_figure_moved_to_another_real_slot_stays_loaded(self):
+        portal, m = self.mirror()
+        m.real.figures = {2: m.real.figures[0]}  # between two polls: it is seen placed before it is seen lifted
+        m.poll()
+        loaded = [n for n, s in enumerate(portal.slots) if s.path]
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(m.slots, {2: (loaded[0], pb.dump_path(self.image, 'current'), self.uid)})
+
+    def test_original_backup_is_never_recycled(self):
+        old, new = self.backups(self.image)
+        newer = pb.dump_path(self.image, 'saved 2026-10-18 12.00.00')
+        pb.save_dump(newer, self.image)
+        pb.keep_one_backup(self.uid)
+        self.assertEqual(self.recycled, [os.path.basename(new)])
+        self.assertTrue(os.path.exists(old) and os.path.exists(newer))
+
+    def test_unsynced_counts_game_saves_the_figure_lacks(self):
+        portal, m = self.mirror()
+        ui = SimpleNamespace(mirror=m, root=None)
+        m.set_write_back(False)
+        with patch('tkinter.messagebox.askyesno', return_value=False) as ask:
+            self.assertTrue(pb.App.unsynced_ok(ui, self.uid) and not ask.called)  # nothing to lose: not asked
+            self.write(portal, 9)  # write-back off: only in the game's copy
+            self.assertEqual(m.unsynced(self.uid), 1)
+            self.assertFalse(pb.App.unsynced_ok(ui, self.uid))  # asked, and the user keeps the progress
+            self.assertIn('"Write saves to real figures" is off', ask.call_args[0][1])
+            m.set_write_back(True)
+            m.poll()
+            self.assertEqual((m.unsynced(self.uid), m.unsynced('ffffffff')), (0, 0))
+            self.assertTrue(pb.App.unsynced_ok(ui, self.uid) and ask.call_count == 1)
 
 
 def open_bytes(path):

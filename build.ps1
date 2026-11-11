@@ -28,3 +28,4 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed --name PortalSync
     --specpath "$WorkDirectory" "$PSScriptRoot/portalsync.py"
 if ($LASTEXITCODE -ne 0) { throw 'PortalSync.exe build failed.' }
 Write-Output "Built $PSScriptRoot\PortalSync.exe and portal_hide.dll"
+Write-Output 'For a release: sign the zip (python tools\sign_release.py <key file> PortalSync-vX.Y.Z.zip) and upload its .sig with it; the updater takes no unsigned zip.'

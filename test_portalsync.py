@@ -17,6 +17,8 @@ import figure as fg
 import portalsync as pb
 from portalsync import Portal, Server, recv_exact
 
+pb.UNFINISHED = os.path.join(tempfile.mkdtemp(), 'unfinished restores.json')  # never the user's own
+
 DEVICE = bytes.fromhex('120100020000004030145001000101020001')
 CONFIG = bytes.fromhex('0902290001010080fa' '090400000203000000' '092111010001221d00' '0705810340000107050203400001')
 DESC = SimpleNamespace(speed=2, device=DEVICE, config=CONFIG, strings={0: bytes.fromhex('04030904')},
@@ -42,6 +44,13 @@ def figure(uid, fid=25):
     return bytes(data)
 
 
+def game_polls(portal):
+    """The game reads status reports until it has seen every figure lifted and placed; until then the virtual
+    portal refuses its writes to a figure that was swapped in (Slot.writable)."""
+    while any(s.queued for s in portal.slots):
+        portal.status()
+
+
 def fake_bin(d):
     """Send recycle() into d/bin instead of the real Recycle Bin; returns that folder."""
     trash = os.path.join(d, 'bin')
@@ -51,7 +60,7 @@ def fake_bin(d):
 
 
 def one_backup():
-    """keep_one_backup keeps the newest backup ('original' counts as oldest) and bins the rest."""
+    """keep_one_backup keeps the newest backup and 'original' (the first read, never binned) and bins the rest."""
     with tempfile.TemporaryDirectory() as d:
         pb.DUMPS = d
         trash = fake_bin(d)
@@ -64,8 +73,8 @@ def one_backup():
         assert [os.path.basename(p) for p in pb.backups()['86bc1263']] == [names[0], names[1], names[2], names[3]]
         for uid in pb.backups():
             pb.keep_one_backup(uid)
-        assert sorted(f for f in os.listdir(d) if f != 'bin') == sorted([names[3], names[4], names[5], names[6]])
-        assert sorted(os.listdir(trash)) == sorted(names[:3])
+        assert sorted(f for f in os.listdir(d) if f != 'bin') == sorted([names[0], names[3], names[4], names[5], names[6]])
+        assert sorted(os.listdir(trash)) == sorted(names[1:3])
 
 
 def names():
@@ -185,12 +194,13 @@ def mirror():
         m.real.figures = {2: bytearray(real)}  # placed again: mirror file has block 9 the figure lacks -> archived
         m.poll()
         archived = [f for f in os.listdir(d) if f.startswith('Zook (86bc1263) - saved ')]
-        assert s.path == mirror_file and len(archived) == 1  # the newest backup; the original went to the bin
-        assert os.listdir(trash) == [os.path.basename(backup)] and open(os.path.join(trash, os.path.basename(backup)), 'rb').read() == zook
+        assert s.path == mirror_file and len(archived) == 1  # the newest backup; the original stays as well
+        assert not os.listdir(trash) and open(backup, 'rb').read() == zook
         assert open(os.path.join(d, archived[0]), 'rb').read()[144:160] == bytes([4]) * 16
 
         m.release()  # unplugged: copy stays loaded
         assert s.path == mirror_file and '86bc1263' in m.kept and m.real is None
+        game_polls(portal)
         game_write(8, 3)  # played while unplugged: mirror file only
         m.set_write_back(True)
         m.real, m.fresh = FakeReal({4: bytearray(real)}), True  # plugged back, figure in another real slot
@@ -224,17 +234,18 @@ def restoring():
         m.poll()  # placed again: the current copy had progress the figure lacks -> saved, offered, the only backup
         offer = m.offers.get_nowait()
         progress = read(offer)
-        assert kept() == [os.path.basename(offer)] and os.listdir(trash) == ['Zook (86bc1263) - original.sky']
-        (path, label, what, n), = m.saved_copies()
+        assert kept() == ['Zook (86bc1263) - original.sky', os.path.basename(offer)] and not os.listdir(trash)
+        (path, label, what, n), _ = m.saved_copies()  # newest first, then the original
         assert (path, label, n) == (offer, 'Zook (86bc1263)', 1) and what.startswith('saved ') and ':' in what
 
+        game_polls(portal)
         portal.command(bytes([ord('W'), 0x10, 6]) + bytes([4]) * 16)  # unsynced game progress (write-back off)
         job = m.restore(offer)
         assert (job.uid, job.state) == ('86bc1263', 'queued')
         m.poll()  # the restore job
         assert job.state == 'completed' and m.finished.get_nowait() is job
         s = portal.slots[0]
-        snapshot, = kept()
+        _, snapshot = kept()  # besides the original
         assert snapshot.startswith('Zook (86bc1263) - before restore ') and read(d, snapshot) == zook  # undo
         binned = [read(trash, f) for f in os.listdir(trash)]
         assert progress in binned and any(b[96:112] == bytes([4]) * 16 for b in binned)  # recoverable, not lost
@@ -245,17 +256,18 @@ def restoring():
         with open(source, 'wb') as f:
             f.write(progress)
         m.set_write_back(True)
+        game_polls(portal)
         portal.command(bytes([ord('W'), 0x10, 6]) + bytes([5]) * 16)  # a write still queued when restore is asked
         m.restore(source)
         m.poll()  # the write runs first, then the restore puts block 6 back
-        snapshot, = kept()
+        _, snapshot = kept()
         assert bytes(m.real.figures[2]) == progress and read(d, snapshot)[96:112] == bytes([5]) * 16
         m.set_write_back(False)
 
         m.restore(source)
         m.real.figures = {}
         m.poll()  # lifted before the job ran: nothing written, backup unchanged
-        assert kept() == [snapshot]
+        assert kept()[1:] == [snapshot]
 
         for bad in (os.path.join(d, 'short.sky'), os.path.join(d, 'other.sky')):
             with open(bad, 'wb') as f:
@@ -351,7 +363,8 @@ def editor_window():
             server = Server(Portal(DESC.r_reply), DESC)
             said = []
             m = pb.Mirror(server, vhci_bus=3)
-            app = SimpleNamespace(root=root, server=server, portal=server.portal, mirror=m, say=said.append, **pb.App.LIGHT)
+            app = SimpleNamespace(root=root, server=server, portal=server.portal, mirror=m, say=said.append,
+                                  unsynced_ok=lambda uid, parent=None: True, **pb.App.LIGHT)
             zook = saved_figure('0a0b0c0d')
             path = os.path.join(d, 'Zook (0a0b0c0d) - current.sky')
             pb.save_dump(path, zook)
@@ -424,7 +437,8 @@ def hex_tab():
             server = Server(Portal(DESC.r_reply), DESC)
             said = []
             m = pb.Mirror(server, vhci_bus=3)
-            app = SimpleNamespace(root=root, server=server, portal=server.portal, mirror=m, say=said.append, **pb.App.LIGHT)
+            app = SimpleNamespace(root=root, server=server, portal=server.portal, mirror=m, say=said.append,
+                                  unsynced_ok=lambda uid, parent=None: True, **pb.App.LIGHT)
             zook = saved_figure('0a0b0c0d')
             path = os.path.join(d, 'Zook (0a0b0c0d) - current.sky')
             pb.save_dump(path, zook)
@@ -588,7 +602,7 @@ def restore_incomplete():
         job = m.restore(path)
         m.poll()
         assert (job.state, job.written, job.total, job.message) == ('incomplete', 2, 3, '')
-        assert pb.backups('86bc1263')['86bc1263'] == [job.snapshot] and open(job.snapshot, 'rb').read() == zook
+        assert pb.backups('86bc1263')['86bc1263'][1:] == [job.snapshot] and open(job.snapshot, 'rb').read() == zook
         said, answers = [], [True]
         ui = SimpleNamespace(say=said.append, alert=lambda msg, ask=False: said.append(msg) or answers.pop(), mirror=m)
         assert m.finished.get_nowait() is job
@@ -600,7 +614,7 @@ def restore_incomplete():
         retry = m.finished.get_nowait()
         assert retry is not job and (retry.state, retry.written, retry.total) == ('completed', 1, 1)
         assert retry.snapshot == job.snapshot and before() == [os.path.basename(job.snapshot)]  # no half-written backup
-        assert pb.backups('86bc1263')['86bc1263'] == [job.snapshot] and bytes(m.real.figures[2]) == new
+        assert pb.backups('86bc1263')['86bc1263'][1:] == [job.snapshot] and bytes(m.real.figures[2]) == new
 
 
 def restore_swapped():
@@ -646,6 +660,7 @@ def restore_order():
         old = m.real.figures[2][:] = figure('86bc1263')  # as if never restored, so each restore has work to do
         m.RETRY_DELAY = 1000
         m.real.fail = {6: 1}
+        game_polls(portal)
         game_write(6, 2)
         m.poll()  # the write fails: a retry waits
         assert m.retries
@@ -656,6 +671,7 @@ def restore_order():
         assert (job.state, job.written) == ('completed', 3) and not m.retries and bytes(m.real.figures[2]) == new
 
         m.real.figures[2][:] = old
+        game_polls(portal)
         job = m.restore(path)
         game_write(5, 3)  # old data queued after the restore was asked, before it ran
         m.poll()
@@ -827,12 +843,12 @@ def incomplete_kept():
         m.real.fail = {6: 99}
         job = m.restore(path)
         m.poll()
-        assert job.state == 'incomplete' and m.unfinished == {'86bc1263': job.snapshot}
+        assert job.state == 'incomplete' and m.unfinished['86bc1263'][0] == job.snapshot
         half = m.real.figures.pop(2)
         m.poll()  # lifted
         m.real.figures[2] = half
         m.poll()  # placed again: the restored game copy differs from the figure, so it is archived
-        assert os.path.exists(job.snapshot) and len(pb.backups('86bc1263')['86bc1263']) == 2
+        assert os.path.exists(job.snapshot) and len(pb.backups('86bc1263')['86bc1263']) == 3  # with the original
         m.real.fail = {}
         retry = m.restore(path)
         m.poll()
@@ -1051,6 +1067,7 @@ def unsaved_progress():
 
             n = portal.load(figure('0a0b0c0d'), path)  # the rescue fails too: nothing let go
             s = portal.slots[n]
+            game_polls(portal)
             portal.write(n, 6, bytes([10]) * 16)
             open(os.path.join(d, 'file'), 'w').close()
             pb.UNSAVED = os.path.join(d, 'file', 'rescue')
@@ -1264,7 +1281,7 @@ def settings_logic():
             pb.keep_one_backup('86bc1263')
         finally:
             pb.BACKUPS_KEPT = 1
-        assert sorted(os.listdir(trash)) == sorted(names[:2])  # the three newest stay
+        assert os.listdir(trash) == [names[1]]  # the three newest stay, and the original
 
         src, dst = os.path.join(d, 'old'), os.path.join(d, 'new')
         os.makedirs(src)
@@ -1379,8 +1396,9 @@ def extras():
 def updating():
     """install_update: only the allowlisted files, checked and size-capped before writing, all or none (a failure
     mid-swap puts the old files back); recover_update undoes a swap cut off by a crash. User data is never touched."""
-    import io, json, urllib.request, zipfile
+    import hashlib, io, json, urllib.request, zipfile
     url = pb.DOWNLOADS + 'v9.0.0/PortalSync-v9.0.0.zip'
+    sha = lambda data: 'sha256:' + hashlib.sha256(data).hexdigest()  # as GitHub lists a release asset
     release = {n: b'MZnew ' + n.encode() for n in pb.REQUIRED_FILES} | {'README.md': b'new readme'}
 
     def zipped(files, sizes=None):
@@ -1407,6 +1425,8 @@ def updating():
             os.path.join('thumbnails', '25_0.png'): b'png'}
     old = {n: b'old ' + n.encode() for n in pb.REQUIRED_FILES}
     saved_open, saved_replace, saved_recycle = urllib.request.urlopen, os.replace, pb.recycle
+    assert len(bytes.fromhex(pb.UPDATE_KEY)) in (0, 64)  # the shipped release key: none, or a P-256 public key
+    shipped_key, pb.UPDATE_KEY = pb.UPDATE_KEY, ''  # first without a key; the signature checks follow with a test key
     with tempfile.TemporaryDirectory() as d:
         def fresh():
             app = tempfile.mkdtemp(dir=d)
@@ -1415,11 +1435,11 @@ def updating():
                 open(os.path.join(app, name), 'wb').write(body)
             return app
 
-        def refused(data, app, why):
-            urllib.request.urlopen = lambda req, timeout: io.BytesIO(data)
+        def refused(data, app, why, digest=None, sig_url=None, signature=b''):
+            urllib.request.urlopen = lambda req, timeout: io.BytesIO(signature if req.full_url.endswith('.sig') else data)
             before = tree(app)
             try:
-                pb.install_update(url, app)
+                pb.install_update(url, app, sha(data) if digest is None else digest, sig_url)
                 raise AssertionError(f'installed despite {why}')
             except ValueError as e:
                 assert why in str(e), e
@@ -1445,21 +1465,46 @@ def updating():
                 refused(zipped(release), app, 'larger than')
             finally:
                 pb.UPDATE_MAX = cap
+            refused(zipped(release), app, 'SHA-256 differs', digest='sha256:' + '0' * 64)  # not the listed file
+            refused(zipped(release), app, 'SHA-256 differs', digest='')  # the release lists no digest
+
+            # with a release key set: only a zip signed with it (tools/sign_release.py), its .sig from the release
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tools'))
+            import sign_release
+            private, public = sign_release.keygen()
+            good, sig_url = zipped(release), url + '.sig'
+            signed = sign_release.sign(private, hashlib.sha256(good).digest())
+            assert pb.signed_by(public, hashlib.sha256(good).digest(), signed)
+            assert not pb.signed_by(public, hashlib.sha256(b'other').digest(), signed)
+            assert not pb.signed_by(sign_release.keygen()[1], hashlib.sha256(good).digest(), signed)
+            pb.UPDATE_KEY = public.hex()
+            try:
+                refused(good, app, 'no signature')
+                refused(good, app, 'no signature', sig_url='https://example.com/x.zip.sig')
+                refused(good, app, 'not signed', sig_url=sig_url, signature=signed[:-1] + bytes([signed[-1] ^ 1]))
+                refused(good, app, 'not signed', sig_url=sig_url, signature=sign_release.sign(sign_release.keygen()[0],
+                                                                                              hashlib.sha256(good).digest()))
+                signed_app = fresh()
+                urllib.request.urlopen = lambda req, timeout: io.BytesIO(signed if req.full_url.endswith('.sig') else good)
+                assert pb.install_update(url, signed_app, sha(good), sig_url) == sorted(release)
+            finally:
+                pb.UPDATE_KEY = ''
 
             # success: every file replaced, the old ones as .old, user data and evil names ignored
             evil = {'../x': b'x', 'settings.json': b'{}', 'dumps/a.sky': b'evil', 'PortalSync/LICENSE.txt': b'?'}
-            urllib.request.urlopen = lambda req, timeout: io.BytesIO(zipped(
-                {f'PortalSync/{n}': b for n, b in release.items()} | evil))
-            assert pb.install_update(url, app) == sorted(release)
+            good = zipped({f'PortalSync/{n}': b for n, b in release.items()} | evil)
+            urllib.request.urlopen = lambda req, timeout: io.BytesIO(good)
+            assert pb.install_update(url, app, sha(good)) == sorted(release)
             want = user | release | {n + '.old': b for n, b in old.items()}
             assert tree(app) == want, sorted(tree(app))
             assert not os.path.exists(os.path.join(d, 'x'))
-            assert pb.install_update(url, app) == sorted(release)  # again: the earlier .old files go to the bin first
+            assert pb.install_update(url, app, sha(good)) == sorted(release)  # again: the earlier .old files go to the bin first
             assert tree(app) == want | {'README.md.old': b'new readme'} | {n + '.old': b for n, b in release.items()}
 
             # a failure on the 3rd file mid-swap: all old files back, no journal, no .new
             app = fresh()
-            urllib.request.urlopen = lambda req, timeout: io.BytesIO(zipped(release))
+            good = zipped(release)
+            urllib.request.urlopen = lambda req, timeout: io.BytesIO(good)
 
             def flaky(src, dst):
                 if src.endswith('portal_descriptors.json.new'):
@@ -1467,7 +1512,7 @@ def updating():
                 return saved_replace(src, dst)
             os.replace = flaky
             try:
-                pb.install_update(url, app)
+                pb.install_update(url, app, sha(good))
                 raise AssertionError('the swap failure was hidden')
             except OSError as e:
                 assert 'in use' in str(e) and 'the old version is kept' in str(e), e
@@ -1491,6 +1536,7 @@ def updating():
             assert tree(app) == old | user, sorted(tree(app))
         finally:
             urllib.request.urlopen, os.replace, pb.recycle = saved_open, saved_replace, saved_recycle
+            pb.UPDATE_KEY = shipped_key
 
 
 def setup_checking():
