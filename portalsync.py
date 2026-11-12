@@ -379,6 +379,20 @@ def same_lineage(figure, left, game):
         figure[o:o + 16] in (left[o:o + 16], game[o:o + 16]) for o in range(0, 1024, 16))
 
 
+def placed_copy(figure, left, game, write_back, game_damaged):
+    """What becomes of the game's copy of a figure (its current.sky) when the figure is placed, decided from the
+    images alone: 'same' (nothing to do), 'catch up' (the figure is as PortalSync left it but for blocks of this
+    very save, so the game's saves that did not reach it are finished like write-back would have: lifted
+    mid-write, 2026-10-11), 'offer' (progress the figure does not have: set aside as a saved backup and offered
+    for restore) or 'set aside' (the same, but never offered: a save the game would refuse, or no data block
+    differs)."""
+    if game == figure:
+        return 'same'
+    if write_back and not game_damaged and same_lineage(figure, left, game):
+        return 'catch up'
+    return 'offer' if not game_damaged and changed_blocks(game, figure) else 'set aside'
+
+
 def unfinished_restores():
     """Mirror.unfinished as the last run left it: {uid: (before-restore snapshot, what the figure held when its
     restore stopped, or None)}, only snapshots still in dumps/. Their figures' backups are not pruned at start."""
@@ -1254,12 +1268,10 @@ class Mirror:
             with open(path, 'rb') as f:
                 previous = f.read()
             bad = damaged(path)  # a 0-byte or stray file too (power loss): figure_info needs 1024 bytes
-            if previous != data and self.write_back and not bad and same_lineage(data, self.left.get(uid), previous):
-                # The figure is as PortalSync left it, but for blocks of this very save, so the difference is only
-                # game saves that did not reach it (lifted mid-write, 2026-10-11): finish them like write-back
-                # would have.
+            what = placed_copy(data, self.left.get(uid), previous, self.write_back, bad)
+            if what == 'catch up':
                 catch_up = data = previous
-            elif previous != data:  # progress the real figure does not have: keep it, never overwrite
+            elif what != 'same':  # progress the real figure does not have: keep it, never overwrite
                 old = stamped(data, 'saved')
                 os.replace(path, old)
                 log(f'{os.path.basename(path)} differed from the real figure; kept as {os.path.basename(old)}')
@@ -1267,8 +1279,8 @@ class Mirror:
                     log(f'{os.path.basename(old)}: its newest save is damaged, so it is not offered for restore')
                     if prune:
                         keep_one_backup(uid)  # keeps an intact backup if there is one
-                else:
-                    offer = old if changed_blocks(previous, data) else None
+                elif what == 'offer':
+                    offer = old
         save_dump(path, data)
         with self.server.cv:
             v = self.server.portal.load(data, path)
@@ -4148,7 +4160,7 @@ class App:
             other = dict(others)[choice.get()]
             a, b = figure_fields(mine), figure_fields(other)
             for key in [k for k in a if k in b] + [k for k in b if k not in a]:
-                if key in ('id', 'variant', 'wowpow_ok', 'blank'):
+                if key in ('id', 'variant', 'wowpow_ok', 'blank', 'old_damaged'):
                     continue
                 va, vb = (shown(key, x.get(key, '')) for x in (a, b))
                 table.insert('', 'end', text=key.rstrip('_').replace('_', ' ').capitalize() + (' (unverified)' if key.endswith('_') else ''),

@@ -32,7 +32,7 @@ python test_portalsync.py
 python -m unittest -v test_save_safety
 ```
 
-The first prints `ok`, and the second runs 34 save-safety tests. The tests use fake portals and a loopback USB/IP client, so no hardware is needed.
+The first prints `ok`, and the second runs 35 save-safety tests. The tests use fake portals and a loopback USB/IP client, so no hardware is needed.
 
 ## Files
 

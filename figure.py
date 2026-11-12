@@ -268,13 +268,16 @@ def figure_fields(data):
         f['blank'] = not any(d[0x80:0x90]) and not any(d[0x240:0x250])
         return f
     f['damaged'] = any(s != c for s, c in area_checksums(d, a)) or (has_b and b_checksum(d, b)[0] != b_checksum(d, b)[1])
+    f['old_damaged'] = any(any(s != c for s, c in area_checksums(d, x)) for x in (0x80, 0x240)
+                           if x != a and any(data[x:x + 16])) or any(
+        b_checksum(d, x)[0] != b_checksum(d, x)[1] for x in (0x110, 0x2D0) if x != b and any(data[x:x + 16]))
     f['time'], f['placed'] = A(0x05, 4), date_at(d, raw_a(a, 0x40))
     if f['kind'] == 'vehicle':
         f['gearbits'] = B(0x78, 2) if has_b else 0
         f['vehicle_xp_'], f['vehicle_flags_'], f['mods_'] = A(0x00, 3), A(0x10, 3), A(0x3E, 2)
         f['cosmetics_'] = [A(o, 1) for o in (0x18, 0x19, 0x1A, 0x1B)]  # decoration, topper, neon, shout
         return f
-    xp = A(0x00, 3) + (B(0x73, 2) + B(0x78, 4) if has_b else 0)
+    xp = A(0x00, 3) + (B(0x73, 2) + B(0x78, 3) if has_b else 0)
     f['xp'] = xp
     f['level'] = None if 1000 <= fid < 2000 or 600 <= fid < 700 else sum(xp >= need for need in LEVELS)
     f['gold'] = None if 1000 <= fid < 2000 else A(0x03, 2)  # a Swapper's bottom half: the top keeps them
@@ -344,44 +347,27 @@ def newest(d, a, b, at):
 
 
 def figure_info(data):
-    """What a figure image holds: level, gold, nickname, and whether its newest save is damaged (the game
-    then says "A toy on the portal has a problem", seen with Snap Shot on 2026-10-10). Traps, vehicles,
-    items and trophies keep other data: for them only 'kind' is filled in."""
+    """What a figure image holds, for the window and the Mirror: level, gold, nickname, and whether its newest save
+    is damaged (the game then says "A toy on the portal has a problem", seen with Snap Shot on 2026-10-10). A view
+    of figure_fields, the one place that reads the format. Only Skylanders and used traps are filled in."""
     fid = struct.unpack_from('<H', data, 0x10)[0]
     info = SimpleNamespace(kind='other', level=None, gold=None, nickname='', damaged=False, old_damaged=False,
                            villains=[], xp=None)
-    if 210 <= fid <= 220 and (any(data[0x80:0x90]) or any(data[0x240:0x250])):  # a trap that has held a villain
-        # Its newest area's first block counts the villains; each following sector starts with one's id.
-        # The first is the one in the trap now (a newly trapped villain takes that place, 2026-10-16).
-        d = crypt(data)
-        a = newest(d, 0x80, 0x240, 9)
-        info.kind = 'trap'
-        info.villains = [VILLAINS.get(d[a + 0x10 + k * 0x40], f'villain {d[a + 0x10 + k * 0x40]}')
-                         for k in range(min(d[a + 1], 6))]
-        return info
-    # items, traps, vehicles, trophies (Dolphin's types), and Imaginators Creation Crystals: a crystal passes checksum
-    # types 1 and 2, but its third and second-area blocks use another layout (the user's two, 2026-10-18), so
-    # reading it like a Skylander called it damaged and found a garbage nickname
-    if 200 <= fid < 400 or 3200 <= fid < 3400 or fid >= 3500 or 680 <= fid < 700:
-        return info
-    if not any(data[0x80:0x90]) and not any(data[0x240:0x250]):
+    f = figure_fields(data)
+    if f['kind'] == 'trap':  # the first villain is the one in the trap now (a newly trapped one takes that place)
+        info.kind, info.villains = 'trap', [VILLAINS.get(v, f'villain {v}') for v, _ in f['villains']]
+    elif 200 <= fid < 400 or 3200 <= fid < 3400 or fid >= 3500 or 680 <= fid < 700:
+        # items, unused traps, vehicles, trophies (Dolphin's types), and Imaginators Creation Crystals: a crystal
+        # passes checksum types 1 and 2, but its third and second-area blocks use another layout (the user's two,
+        # 2026-10-18), so reading it like a Skylander called it damaged and found a garbage nickname
+        pass
+    elif f['kind'] == 'new':
         info.kind = 'new'
-        return info
-    d = crypt(data)
-    a = newest(d, 0x80, 0x240, 9)
-    used = [x for x in (0x80, 0x240) if any(data[x:x + 16])]
-    bad = {x: any(s != c for s, c in area_checksums(d, x)) for x in used}
-    b = newest(d, 0x110, 0x2D0, 2)
-    bad_b = {x: b_checksum(d, x)[0] != b_checksum(d, x)[1] for x in (0x110, 0x2D0) if any(data[x:x + 16])}
-    info.kind, info.damaged = 'skylander', bad[a] or bad_b.get(b, False)
-    info.old_damaged = any(v for x, v in bad.items() if x != a) or any(v for x, v in bad_b.items() if x != b)
-    info.gold = struct.unpack_from('<H', d, a + 3)[0]
-    info.nickname = (d[a + 0x20:a + 0x30] + d[a + 0x40:a + 0x50]).decode('utf-16-le', 'replace').split('\0')[0]
-    if 1000 <= fid < 2000:  # a Swapper's bottom half: the top half keeps the level and gold
-        info.gold = None
-    elif not 600 <= fid < 700:  # Imaginators count experience differently
-        xp = int.from_bytes(d[a:a + 3], 'little') + struct.unpack_from('<H', d, b + 3)[0] + int.from_bytes(d[b + 8:b + 11], 'little')
-        info.level, info.xp = sum(xp >= need for need in LEVELS), xp
+    else:
+        info.kind, info.damaged, info.old_damaged = 'skylander', f['damaged'], f['old_damaged']
+        info.gold, info.nickname = f['gold'], f['nickname']
+        if f['level'] is not None:  # not a Swapper's bottom half (the top keeps them) nor a Sensei
+            info.level, info.xp = f['level'], f['xp']
     return info
 
 

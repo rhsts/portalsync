@@ -500,6 +500,26 @@ class SaveSafetyTests(unittest.TestCase):
         else:
             self.fail('the virtual portal stayed taken')
 
+    def test_placed_copy_decides_from_the_images_alone(self):
+        left = self.image  # what PortalSync left on the figure
+        game = pb.edit(left, gold=4321)  # the game's copy after a save
+        blocks = pb.changed_blocks(game, left)
+        half = bytearray(left)  # the first block of that save reached the figure
+        half[blocks[0] * 16:blocks[0] * 16 + 16] = game[blocks[0] * 16:blocks[0] * 16 + 16]
+        elsewhere = pb.edit(left, gold=7)  # played on a console meanwhile
+        trailer = bytearray(left)
+        trailer[0x70:0x80] = bytes([1]) * 16  # differs in a sector trailer only: nothing a restore would write
+        for figure, known, copy, write_back, damaged, want in (
+                (left, left, left, True, False, 'same'),
+                (left, left, game, True, False, 'catch up'),  # lifted before any block landed
+                (bytes(half), left, game, True, False, 'catch up'),  # lifted with one block landed
+                (bytes(half), left, game, False, False, 'offer'),  # write-back off: the user decides
+                (left, None, game, True, False, 'offer'),  # first placement this run: nothing known about it
+                (elsewhere, left, game, True, False, 'offer'),  # played elsewhere: never synced over
+                (left, left, game, True, True, 'set aside'),  # a damaged copy is never written nor offered
+                (left, left, bytes(trailer), False, False, 'set aside')):
+            self.assertEqual(pb.placed_copy(figure, known, copy, write_back, damaged), want)
+
     def test_original_backup_is_never_recycled(self):
         old, new = self.backups(self.image)
         newer = pb.dump_path(self.image, 'saved 2026-10-18 12.00.00')
