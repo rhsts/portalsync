@@ -155,10 +155,13 @@ def edit(data, gold=None, nickname=None, xp=None, upgrades=None, gearbits=None, 
     d = bytearray(crypt(data))
     a, b = newest(d, 0x80, 0x240, 9), newest(d, 0x110, 0x2D0, 2)
     a2, b2 = 0x80 + 0x240 - a, 0x110 + 0x2D0 - b
+    # the second area: only for a figure that has one, or an edit that needs it (a figure only ever played in
+    # Spyro's Adventure has none, and got one for nothing)
+    second = not trap and bool(any(data[b:b + 16]) or (xp or 0) > 33000 or (upgrades or 0) >> 10 or gearbits is not None)
     for st in range(0, 0x150 if trap else 0x70, 16):  # a trap's area runs on over all its villain slots
         d[raw_a(a2, st):raw_a(a2, st) + 16] = d[raw_a(a, st):raw_a(a, st) + 16]
     d[a2 + 9] = (d[a + 9] + 1) & 0xFF
-    if not trap:
+    if second:
         for o in B_BLOCKS:
             d[b2 + o:b2 + o + 16] = d[b + o:b + o + 16]
         d[b2 + 2] = (d[b + 2] + 1) & 0xFF
@@ -171,16 +174,18 @@ def edit(data, gold=None, nickname=None, xp=None, upgrades=None, gearbits=None, 
         d[A(0x20):A(0x20) + 16], d[A(0x30):A(0x30) + 16] = name[:16], name[16:32]
     if xp is not None:
         d[A(0x00):A(0x00) + 3] = min(xp, 33000).to_bytes(3, 'little')
-        struct.pack_into('<H', d, B(0x73), min(max(xp - 33000, 0), 63500))
-        struct.pack_into('<I', d, B(0x78), min(max(xp - 96500, 0), 101000))
+        if second:
+            struct.pack_into('<H', d, B(0x73), min(max(xp - 33000, 0), 63500))
+            struct.pack_into('<I', d, B(0x78), min(max(xp - 96500, 0), 101000))
     if upgrades is not None:
         struct.pack_into('<H', d, A(0x10), (int.from_bytes(d[A(0x10):A(0x10) + 2], 'little') & ~0x3FF) | (upgrades & 0x3FF))
-        struct.pack_into('<H', d, B(0x76), (int.from_bytes(d[B(0x76):B(0x76) + 2], 'little') & ~0xF) | (upgrades >> 10 & 0xF))
+        if second:
+            struct.pack_into('<H', d, B(0x76), (int.from_bytes(d[B(0x76):B(0x76) + 2], 'little') & ~0xF) | (upgrades >> 10 & 0xF))
     if gearbits is not None:
         struct.pack_into('<H', d, B(0x78), gearbits)
     if villain is not None:
         d[A(0x10)] = villain
-    seal(d, a2, None if trap else b2, trap)
+    seal(d, a2, b2 if second else None, trap)
     return recrypt(data, bytes(d))
 
 

@@ -467,6 +467,8 @@ def save_dump(path, data):
     tmp = path + '.tmp'
     with open(tmp, 'wb') as f:
         f.write(data)
+        f.flush()
+        os.fsync(f.fileno())  # on the disk before it takes the old file's place: a power cut left empty files
     os.replace(tmp, path)  # never leave a half-written dump
 
 
@@ -798,6 +800,7 @@ class Server:
         self.portal, self.desc = portal, desc
         self.cv = threading.Condition()  # ponytail: one lock for portal state, pending URBs and socket writes
         self.sound = None  # PortalSound: main() turns it on
+        self.imported = False  # a client has the virtual portal: a second one is refused (handle)
 
     def serve(self, listener):
         while True:
@@ -825,12 +828,18 @@ class Server:
                 conn.sendall(struct.pack('>HHII', 0x0111, 0x0005, 0, 1) + self.dev_info(True))
             elif code == 0x8003:  # OP_REQ_IMPORT
                 busid = recv_exact(conn, 32).split(b'\0')[0].decode()
-                if busid != BUSID:
+                with self.cv:
+                    busy = busid != BUSID or self.imported  # one portal, one host: two would share its reports
+                    self.imported = self.imported or not busy
+                if busy:
                     conn.sendall(struct.pack('>HHI', 0x0111, 0x0003, 1))
                     return
-                conn.sendall(struct.pack('>HHI', 0x0111, 0x0003, 0) + self.dev_info(False))
-                log('imported by', conn.getpeername())
-                self.urbs(conn)
+                try:
+                    conn.sendall(struct.pack('>HHI', 0x0111, 0x0003, 0) + self.dev_info(False))
+                    log('imported by', conn.getpeername())
+                    self.urbs(conn)
+                finally:
+                    self.imported = False
         except (ConnectionError, OSError) as e:
             log('connection closed:', e)
         finally:
@@ -881,6 +890,8 @@ class Server:
                 if cmd != 1:
                     raise ConnectionError(f'unknown command {cmd:#x}')
                 length = struct.unpack_from('>I', h, 24)[0]
+                if direction == 0 and length > 0x10000:  # a portal report is 32 bytes, a sound block 64
+                    raise ConnectionError(f'{length} bytes sent to the portal')
                 setup = h[40:48]
                 data = recv_exact(conn, length) if direction == 0 and length else b''
                 if ep != 0 and direction == 0:  # interrupt OUT carries portal audio only (Cemu/Dolphin)
@@ -1081,6 +1092,7 @@ class Mirror:
         self.write_back = False  # UI checkbox, default off; change it with set_write_back()
         self.write_epoch = 0  # disabling cancels automatic jobs, including those already in the queue
         self.retries = {}  # (uid, block) -> failed automatic write, retained if retries are exhausted
+        self.backed = set()  # uids seen with a backup in dumps/ (queue_block)
         self.known = {}  # real slot -> bytearray: what the real figure holds (read on placement, updated by writes)
         self.left = {}  # uid -> what the real figure held when it was lifted (see place())
         self.offers = queue.Queue()  # archived saved copies the window offers to restore (see add())
@@ -1350,8 +1362,10 @@ class Mirror:
         uid = self.slots[i][2]
         if not 1 <= block < 64 or block % 4 == 3 or len(data) != 16:
             return log(f'write-back {uid} block {block:#04x}: refused (invalid data block)')
-        if not has_backup(uid):
-            return log(f'write-back {uid}: no backup in dumps/, not written')
+        if uid not in self.backed:  # looked up once per figure, not for every block the game saves
+            if not has_backup(uid):
+                return log(f'write-back {uid}: no backup in dumps/, not written')
+            self.backed.add(uid)
         self.retries.pop((uid, block), None)  # a new save supersedes any older retry
         self.jobs.put(('write', i, block, bytes(data), uid, self.write_epoch))
 
@@ -1737,10 +1751,10 @@ def capture():
         data = rp.read_figure(slot)
         path = dump_path(data, 'original')
         if os.path.exists(path):
-            log(f'slot {slot}: {path} exists, kept (identical: {open(path, "rb").read() == data})')
+            with open(path, 'rb') as f:
+                log(f'slot {slot}: {path} exists, kept (identical: {f.read() == data})')
         else:
-            with open(path, 'wb') as f:
-                f.write(data)
+            save_dump(path, data)
             log(f'slot {slot}: backed up to {path}')
     rp.send(ord('A'), 0)
 
@@ -1800,13 +1814,37 @@ def inject(pid, dll):
         k.CloseHandle(proc)
 
 
+def processes():
+    """[(exe name, pid as text)] of the running processes, from a Toolhelp snapshot (tasklist started a program
+    every second)."""
+    from ctypes import wintypes as w
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [('dwSize', w.DWORD), ('cntUsage', w.DWORD), ('th32ProcessID', w.DWORD),
+                    ('th32DefaultHeapID', ctypes.c_size_t), ('th32ModuleID', w.DWORD), ('cntThreads', w.DWORD),
+                    ('th32ParentProcessID', w.DWORD), ('pcPriClassBase', w.LONG), ('dwFlags', w.DWORD),
+                    ('szExeFile', w.WCHAR * 260)]
+    k = ctypes.WinDLL('kernel32')
+    k.CreateToolhelp32Snapshot.restype = w.HANDLE
+    k.Process32FirstW.argtypes = k.Process32NextW.argtypes = (w.HANDLE, ctypes.POINTER(PROCESSENTRY32W))
+    k.CloseHandle.argtypes = (w.HANDLE,)
+    snap = k.CreateToolhelp32Snapshot(2, 0)  # TH32CS_SNAPPROCESS
+    if snap in (None, w.HANDLE(-1).value):
+        return []
+    entry, found = PROCESSENTRY32W(dwSize=ctypes.sizeof(PROCESSENTRY32W)), []
+    more = k.Process32FirstW(snap, ctypes.byref(entry))
+    while more:
+        found.append((entry.szExeFile, str(entry.th32ProcessID)))
+        more = k.Process32NextW(snap, ctypes.byref(entry))
+    k.CloseHandle(snap)
+    return found
+
+
 def watch_emulators():
     """Load portal_hide.dll into every emulator in HIDE_FROM running while PortalSync runs, before it boots a game."""
     seen, tries = set(), {}
     while True:
-        out = subprocess.run(['tasklist', '/fo', 'csv', '/nh'], capture_output=True, text=True,
-                             creationflags=subprocess.CREATE_NO_WINDOW).stdout
-        rows = [r[:2] for r in csv.reader(out.splitlines()) if len(r) > 1 and r[0].lower() in HIDE_FROM]
+        rows = [r for r in processes() if r[0].lower() in HIDE_FROM]
         global RUNNING_EMULATORS
         RUNNING_EMULATORS = {pid: name for name, pid in rows}
         running = {pid for _, pid in rows}
@@ -1816,6 +1854,8 @@ def watch_emulators():
             if pid in seen:
                 continue
             tries[pid] = tries.get(pid, 0) + 1
+            if tries[pid] > 10 and tries[pid] % 10:  # after 10 tries: every 10 s (it may load setupapi.dll later)
+                continue
             try:
                 ok, why = inject(int(pid), HIDE_DLL), 'DllMain refused'
             except OSError as e:  # e.g. access denied while the process is still starting or already exiting
@@ -1823,9 +1863,8 @@ def watch_emulators():
             if ok:
                 seen.add(pid)
                 log(f'{name} (pid {pid}): real portal hidden from it while the virtual one is attached')
-            elif tries[pid] >= 10:
-                seen.add(pid)
-                log(f'{name} (pid {pid}): portal_hide.dll did NOT load after 10 tries: {why}')
+            elif tries[pid] == 10:
+                log(f'{name} (pid {pid}): portal_hide.dll did NOT load after 10 tries: {why}; trying on every 10 s')
         time.sleep(1)
 
 
@@ -1872,11 +1911,15 @@ def download_pictures(url=PICTURES, folder=None):
     z = zipfile.ZipFile(io.BytesIO(data))
     os.makedirs(folder, exist_ok=True)
     saved = 0
-    for member in z.namelist():
-        name = os.path.basename(member)
-        if re.fullmatch(r'\d+_\d+\.png', name):
+    for member in z.infolist():
+        name = os.path.basename(member.filename)
+        if re.fullmatch(r'\d+_\d+\.png', name) and member.file_size <= 5 * 1024 * 1024:  # a picture is ~100 KB
+            with z.open(member) as packed:
+                picture = packed.read(5 * 1024 * 1024 + 1)  # bounded: file_size can lie
+            if len(picture) != member.file_size:
+                continue
             with open(os.path.join(folder, name), 'wb') as f:
-                f.write(z.read(member))
+                f.write(picture)
             saved += 1
     return saved
 
@@ -5049,8 +5092,7 @@ def shutdown(server, mirror, port, listener):
             log(f'closing: {getattr(f, "__name__", f)} failed: {e!r}')
 
     def sound():
-        with server.cv:  # feed() runs under cv
-            server.sound.close()
+        server.sound.close()  # takes PortalSound.lock itself
 
     def last_saves():
         with server.cv:
@@ -5085,11 +5127,18 @@ def main():
             if attempt == (29 if updated else 0):
                 raise SystemExit(f'Port {TCP_PORT} is in use. Is PortalSync already running?')
             time.sleep(0.5)
+    try:  # the last run's log stays: it is what tells what happened to a figure
+        os.replace(os.path.join(HERE, 'portalsync.log'), os.path.join(HERE, 'portalsync.previous.log'))
+    except OSError:
+        pass
     LOG_FILE = open(os.path.join(HERE, 'portalsync.log'), 'w')
     global DUMPS, BACKUPS_KEPT
     prefs = App.settings()
     DUMPS = prefs.get('dumps') or DUMPS
-    BACKUPS_KEPT = prefs.get('backups', 1)
+    try:  # settings.json can be edited by hand
+        BACKUPS_KEPT = max(1, min(10, int(prefs.get('backups', 1))))
+    except (TypeError, ValueError):
+        BACKUPS_KEPT = 1
     if prefs.get('dumps_move_from'):  # the figures folder was changed in Settings
         n = move_dumps(prefs['dumps_move_from'], DUMPS)
         log(f'{n} figure file(s) moved from {prefs["dumps_move_from"]} to {DUMPS}')
@@ -5152,7 +5201,14 @@ def main():
 
         def tick():  # every 200 ms: show mirror changes; also lets Python run signal handlers while Tk waits
             app.root.after(200, tick)  # first, so an error in refresh() doesn't stop the updates
-            app.refresh()
+            try:
+                app.refresh()
+            except Exception:  # PortalSync.exe has no console: without this the window just stops updating
+                import traceback
+                if traceback.format_exc() != failed[0]:  # once, not every 200 ms
+                    failed[0] = traceback.format_exc()
+                    log(f'window update failed:\n{failed[0]}')
+        failed = [None]
         tick()
         app.root.mainloop()
     finally:

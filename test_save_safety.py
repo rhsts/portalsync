@@ -2,6 +2,7 @@
 import builtins
 import os
 import tempfile
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -462,6 +463,42 @@ class SaveSafetyTests(unittest.TestCase):
         loaded = [n for n, s in enumerate(portal.slots) if s.path]
         self.assertEqual(len(loaded), 1)
         self.assertEqual(m.slots, {2: (loaded[0], pb.dump_path(self.image, 'current'), self.uid)})
+
+    def test_edit_gives_no_second_area_to_a_figure_without_one(self):
+        plain, second = bytearray(pb.crypt(self.image)), (0x110, 0x120, 0x140, 0x150, 0x2D0, 0x2E0, 0x300, 0x310)
+        for o in second:  # as after Spyro's Adventure only
+            plain[o:o + 16] = bytes(16)
+        first_game = pb.repaired(pb.crypt(bytes(plain), encrypt=True))
+        edited = pb.edit(first_game, gold=5)
+        self.assertFalse(any(any(edited[o:o + 16]) for o in second))
+        self.assertEqual((pb.figure_info(edited).gold, pb.figure_info(edited).damaged), (5, False))
+        needs_it = pb.edit(first_game, xp=pb.LEVELS[-1])  # level 20 lives in the second area
+        self.assertEqual((pb.figure_info(needs_it).level, pb.figure_info(needs_it).damaged), (20, False))
+
+    def test_usbip_server_takes_one_host_and_bounded_transfers(self):
+        import socket
+        import struct
+        listener = socket.create_server(('127.0.0.1', 0))
+        self.addCleanup(listener.close)
+        threading.Thread(target=pb.Server(pb.Portal(DESC.r_reply), DESC).serve, args=(listener,), daemon=True).start()
+
+        def imported():
+            c = socket.create_connection(listener.getsockname())
+            self.addCleanup(c.close)
+            c.sendall(struct.pack('>HHI', 0x0111, 0x8003, 0) + b'1-1'.ljust(32, b'\0'))
+            return c, struct.unpack('>HHI', pb.recv_exact(c, 8))[2]
+        first, status = imported()
+        self.assertEqual(status, 0)
+        pb.recv_exact(first, 0x138)
+        self.assertEqual(imported()[1], 1)  # the portal is taken
+        first.sendall(struct.pack('>IIIIIIIIII', 1, 1, 0x10001, 0, 0, 0, 2 ** 31, 0, 0xFFFFFFFF, 0) + bytes(8))
+        self.assertEqual(first.recv(1), b'')  # 2 GB "for the portal": hung up on, not read into memory
+        for _ in range(50):  # the portal is free again
+            if imported()[1] == 0:
+                break
+            pb.time.sleep(0.02)
+        else:
+            self.fail('the virtual portal stayed taken')
 
     def test_original_backup_is_never_recycled(self):
         old, new = self.backups(self.image)
