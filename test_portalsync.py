@@ -3,6 +3,7 @@ import socket
 import struct
 import threading
 import time
+import zlib
 from types import SimpleNamespace
 
 import glob
@@ -1574,6 +1575,41 @@ def methods_exist():
         assert not missing, f'{c.name} uses undefined {missing}'
 
 
+def activity_words():
+    """The Activity pane says what happened in plain words (portalsync.log keeps the original lines), and the slot
+    list's figure badge is a valid PNG with see-through corners."""
+    names, slots = {'86bc1263': 'Zook', 'cf388b43': 'Wash Buckler (Bottom)'}, {2: 'Zook'}
+    plain = lambda line: pb.plain_line(line, names, slots)
+    assert plain('backed up Zook (86bc1263) - original.sky') == 'Backed up Zook'
+    assert plain('real slot 0 -> virtual slot 1: 86bc1263') == 'Zook is on the portal (slot 1)'
+    assert plain('real slot 1 -> virtual slot 3: 0a0b0c0d; writing 2 block(s) the game saved that did not reach the '
+                 'figure') == 'figure 0a0b0c0d is on the portal (slot 3); writing 2 block(s) the game saved that did not reach the figure'
+    assert plain('real slot 1 lifted: virtual slot 2 emptied') == 'Zook lifted from the portal'
+    assert plain('real slot 1 lifted: virtual slot 9 emptied') == 'A figure lifted from the portal'
+    assert plain('write-back 86bc1263 block 0x08: verified') == 'Save written to Zook and checked'
+    assert 'FAILED' in plain('write-back 86bc1263 block 0x08: FAILED - real figure may differ')  # stays red
+    assert plain('write-back to real figures ON') == 'Game saves go onto your real figures'
+    assert plain('Wash Buckler (Bottom) (cf388b43) - current.sky differed from the real figure; kept as Wash Buckler '
+                 '(Bottom) (cf388b43) - saved 2026-11-11 20.28.34.sky') == \
+        'Wash Buckler (Bottom): the copy on this PC had saves the figure lacks, kept as a backup'
+    assert plain('Cemu.exe (pid 4412): real portal hidden from it while the virtual one is attached') == \
+        'Cemu sees only the virtual portal'
+    assert plain('edited Zook (86bc1263) - current.sky: gold') == 'Edited Zook (current): gold'
+    assert plain("imported by ('127.0.0.1', 5)") is None and plain('USB/IP server on 127.0.0.1:3240') is None
+    assert plain('usbip attach -r 127.0.0.1 -b 1-1 -> 0 successfully attached to port 1') == 'Virtual portal attached'
+    assert pb.plain_line('real slot 0 -> virtual slot 1: 86bc1263', {}) == 'figure 86bc1263 is on the portal (slot 1)'
+
+    png = pb.badge_png(24, '#3f9e2f', [[(200, 10, 10)] * 3] * 3)
+    assert png[:8] == b'\x89PNG\r\n\x1a\n' and png[12:16] == b'IHDR'
+    raw = zlib.decompress(png[png.index(b'IDAT') + 4:png.index(b'IEND') - 8])
+    pixel = lambda x, y: raw[y * (24 * 4 + 1) + 1 + x * 4:][:4]
+    assert pixel(0, 0)[3] == 0 and pixel(12, 12) == bytes([200, 10, 10, 255]) and pixel(12, 0)[:3] == bytes([63, 158, 47])
+    png = pb.badge_png(24, '#3f9e2f')  # no picture: a light tint of the element colour
+    raw = zlib.decompress(png[png.index(b'IDAT') + 4:png.index(b'IEND') - 8])
+    assert pixel(12, 12)[:3] == bytes([63, 158, 47]) and 0 < pixel(12, 12)[3] < 100
+    assert pb.ELEMENT_COLOURS.keys() >= {e for _, e in pb.DETAILS.values() if e}  # every element has a colour
+
+
 def figure_alone():
     """figure.py stands on its own: importing it loads no portal, window or PortalSync code (step 1 of the split)."""
     code = "import sys, figure; print([m for m in ('portalsync', 'tkinter', 'usb', 'socket') if m in sys.modules])"
@@ -1583,6 +1619,7 @@ def figure_alone():
 
 def main():
     figure_alone()
+    activity_words()
     methods_exist()
     reading(pb.figure_info)
     editing()  # these need the real figure_info
