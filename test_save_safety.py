@@ -378,6 +378,73 @@ class SaveSafetyTests(unittest.TestCase):
             self.assertIn(' - before edit ', os.path.basename(before))
         self.assertEqual(os.path.dirname(pb.stamped(self.image, 'saved')), pb.DUMPS)
 
+    def test_before_edit_copy_of_a_file_in_dumps_goes_to_its_own_folder(self):
+        folder = pb.before_edit_folder(pb.dump_path(self.image, 'loaded copy'))
+        self.assertEqual(folder, os.path.join(pb.DUMPS, 'before edit'))
+        self.assertTrue(os.path.isdir(folder))
+        pb.save_dump(pb.stamped(self.image, 'before edit', folder), self.image)
+        self.assertEqual(pb.played(), [])  # not a figure file in dumps/
+        with tempfile.TemporaryDirectory() as other:
+            self.assertEqual(pb.before_edit_folder(os.path.join(other, 'x.sky')), os.path.abspath(other))
+
+    def test_repair_of_a_trap_keeps_its_villains(self):
+        from figure import seal, raw_a
+        trap = bytearray(pb.new_figure(210, 0))
+        a = 0x80
+        trap[a + 9] = 1  # area counter
+        trap[raw_a(a, 0x01)] = 3  # villains caught
+        for k, villain in enumerate((37, 12, 8)):  # the third slot (struct 0x70) is where 0x110 lies
+            trap[raw_a(a, 0x10 + k * 0x30)] = villain
+        seal(trap, a, None, trap=True)
+        trap[a + 0x0A] ^= 0xFF  # a damaged type 3
+        image = pb.crypt(bytes(trap), encrypt=True)
+        self.assertTrue(pb.figure_fields(image)['damaged'])
+        fixed = pb.figure_fields(pb.repaired(image))
+        self.assertEqual((fixed['villains'], fixed['damaged']), ([(37, 0), (12, 0), (8, 0)], False))
+        blank = pb.new_figure(25, 0)  # never saved: nothing to repair, nothing written
+        self.assertEqual(pb.repaired(blank), blank)
+
+    def test_max_out_is_for_skylanders_only(self):
+        self.assertEqual(pb.figure_info(pb.maxed(self.image)).level, 20)
+        with self.assertRaises(ValueError):
+            pb.maxed(pb.new_figure(25, 0))
+
+    def test_daily_zip_before_the_first_figure(self):
+        with patch.object(pb, 'DUMPS', os.path.join(self.temp.name, 'not yet')):
+            self.assertIsNone(pb.daily_zip())
+
+    def test_a_figure_is_not_loaded_twice_from_two_files(self):
+        portal = pb.Portal(DESC.r_reply)
+        said = []
+        app = SimpleNamespace(server=SimpleNamespace(cv=threading.Condition()), portal=portal, say=said.append,
+                              refresh=lambda: None)
+        first, second = (os.path.join(pb.DUMPS, n) for n in ('a.sky', 'b.sky'))
+        pb.save_dump(first, self.image)
+        pb.save_dump(second, pb.edit(self.image, gold=7))  # the same figure (uid), other progress
+        pb.App.load(app, first)
+        pb.App.load(app, second)
+        self.assertEqual([s.path for s in portal.slots if s.path], [os.path.abspath(first)])
+        self.assertIn('already on the portal', said[-1])
+
+    def test_kept_copy_that_cannot_be_saved_is_not_mixed_with_a_figure_played_elsewhere(self):
+        portal, m = self.mirror()
+        real = m.real
+        with patch.object(pb, 'portal_devices', return_value=[]):
+            m.lost(OSError('unplugged'))  # the figure stays loaded (kept)
+        self.write(portal, 9)
+        portal.slots[0].unsaved = 'disk full'  # that save never reached the disk
+        real.figures[0][96:112] = bytes([0x55]) * 16  # played on a console meanwhile
+        m.real, m.fresh = real, True
+        with patch.object(pb, 'save_dump', side_effect=OSError('disk full')), \
+                patch.object(pb, 'UNSAVED', os.path.join(self.temp.name, 'unsaved')):
+            m.poll()  # the copy can't go anywhere: it stays loaded, but not as this figure
+            self.assertNotIn(0, m.slots)
+            self.write(portal, 3, block=6)  # a game save onto that copy
+            m.poll()
+        self.assertEqual(real.figures[0][96:112], bytes([0x55]) * 16)
+        self.assertEqual(bytes(real.figures[0][80:96]), self.image[80:96])  # nothing written to the figure
+        self.assertIsNotNone(portal.slots[0].path)  # its progress is still loaded
+
     def test_game_write_after_a_swap_is_refused_until_the_game_saw_it(self):
         portal, m = self.mirror()
         self.game_polls(portal)
