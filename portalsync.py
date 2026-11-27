@@ -2288,6 +2288,101 @@ def place_on(x, y, w, h, near):
     return max(left, min(x, right - w)), max(top, min(y, bottom - h))
 
 
+ELEMENT_COLOURS = {'Air': '#3aa6dd', 'Earth': '#9a6b3c', 'Fire': '#e2502b', 'Life': '#3f9e2f', 'Magic': '#9b4fc8',
+                   'Tech': '#e09a1b', 'Undead': '#7a7f95', 'Water': '#2a6fdb', 'Light': '#e6b822', 'Dark': '#5b3f8a'}
+NO_ELEMENT = '#8a8a8a'  # Senseis, traps, vehicles, items: no element in figure_details.json
+
+
+def element_of(data):
+    """The element of a figure image ('Life'), or '' when figure_details.json has none."""
+    key = figure_key(data)
+    return (DETAILS.get(key) or DETAILS.get(key.split(':')[0] + ':0') or ['', ''])[1]
+
+
+def badge_png(size, colour, picture=None):
+    """An RGBA PNG (bytes) of a figure for the main window's slot list: a rounded square with a ring in the figure's
+    element colour, holding its picture (rows of (r, g, b), any size), or tinted with that colour when there is none.
+    Pure Python, so no image package is needed; drawn 3 x 3 times per pixel for smooth edges and scaling."""
+    import zlib
+    ring_rgb = [int(colour[i:i + 2], 16) for i in (1, 3, 5)]
+    radius, ring = size * 0.22, max(2.0, size / 18)
+    src = len(picture) if picture else 0
+
+    def inside(px, py, inset):  # within the rounded square shrunk by inset
+        half, r = size / 2 - inset, radius - inset
+        qx, qy = abs(px - size / 2) - (half - r), abs(py - size / 2) - (half - r)
+        return (max(qx, 0) ** 2 + max(qy, 0) ** 2) ** 0.5 + min(max(qx, qy), 0) - r < 0
+
+    rows = []
+    for y in range(size):
+        row = bytearray([0])  # filter: none
+        for x in range(size):
+            acc, cover = [0, 0, 0], 0
+            for sy in range(3):
+                for sx in range(3):
+                    px, py = x + (sx + 0.5) / 3, y + (sy + 0.5) / 3
+                    if not inside(px, py, 0):
+                        continue
+                    cover += 1
+                    if not inside(px, py, ring):
+                        c = ring_rgb
+                    elif picture:
+                        c = picture[min(src - 1, int(py * src / size))][min(src - 1, int(px * src / size))]
+                    else:
+                        c = ring_rgb
+                        cover -= 0.8  # a light tint of the element colour
+                    acc = [a + v for a, v in zip(acc, c)]
+            n = max(1, sum(1 for sy in range(3) for sx in range(3)
+                           if inside(x + (sx + 0.5) / 3, y + (sy + 0.5) / 3, 0)))
+            row += bytes([round(v / n) for v in acc] + [round(255 * max(0, cover) / 9)])
+        rows.append(bytes(row))
+    chunk = lambda kind, data: (struct.pack('>I', len(data)) + kind + data
+                                + struct.pack('>I', zlib.crc32(kind + data) & 0xFFFFFFFF))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', size, size, 8, 6, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(b''.join(rows), 9)) + chunk(b'IEND', b''))
+
+
+PLAIN_HIDDEN = re.compile(r'(USB/IP server on|imported by|virtual portal on libusb bus|connection closed|usbip detach)')
+SKY_FILE = re.compile(r'(?P<name>[^;:,]+?) \((?P<uid>[0-9a-f]{8})\) - (?P<kind>[^;:]+?)\.sky')
+
+
+def plain_line(text, names, slots=None):
+    """The Activity pane's wording of a log line (portalsync.log keeps the original), or None to leave it out there.
+    names: uid -> figure name; slots: virtual slot number (from 1) -> name of the figure last seen there."""
+    name = lambda uid: names.get(uid) or f'figure {uid}'
+    slots = slots or {}
+    if PLAIN_HIDDEN.match(text):
+        return None
+    m = re.match(r'usbip attach .*-> 0\b', text)
+    if m:
+        return 'Virtual portal attached'
+    m = re.fullmatch(r'backed up (.+?) \(([0-9a-f]{8})\) - original\.sky', text)
+    if m:
+        return f'Backed up {m[1]}'
+    m = re.fullmatch(r'real slot \d+ -> virtual slot (\d+): ([0-9a-f]{8})(?:; (.*))?', text, re.S)
+    if m:
+        return f'{name(m[2])} is on the portal (slot {m[1]})' + (f'; {m[3]}' if m[3] else '')
+    m = re.fullmatch(r'real slot \d+ lifted: virtual slot (\d+) emptied', text)
+    if m:
+        return f'{slots.get(int(m[1]), "A figure")} lifted from the portal'
+    m = re.fullmatch(r'(?:write-back|restore) ([0-9a-f]{8}) block 0x[0-9a-f]+: verified', text)
+    if m:
+        return f'Save written to {name(m[1])} and checked'
+    m = re.fullmatch(r'write-back to real figures (ON|off)', text)
+    if m:
+        return 'Game saves go onto your real figures' if m[1] == 'ON' else \
+            'Game saves stay on this PC ("Write saves to real figures" is off)'
+    m = SKY_FILE.match(text)
+    if m and ' differed from the real figure; kept as ' in text:
+        return f'{m["name"]}: the copy on this PC had saves the figure lacks, kept as a backup'
+    m = re.fullmatch(r'(\S+?)(?:\.exe)? \(pid \d+\): real portal hidden from it.*', text, re.S | re.I)
+    if m:
+        return f'{m[1]} sees only the virtual portal'
+    text = SKY_FILE.sub(lambda f: f'{f["name"]} ({f["kind"]})', text)  # 'Zook (86bc1263) - current.sky' -> 'Zook (current)'
+    text = re.sub(r'\b[0-9a-f]{8}\b', lambda u: names.get(u[0], u[0]), text)
+    return text[:1].upper() + text[1:]
+
+
 def dark_title(window):
     """Windows 10/11 dark title bar for a Tk window (DWMWA_USE_IMMERSIVE_DARK_MODE)."""
     try:
@@ -2414,14 +2509,17 @@ class App:
                  ACCENT='#0067c0', ACCENT_HOVER='#1975c5', ACCENT_DOWN='#005ba8', SELECTED='#cce4f7', BAD='#c42b1c',
                  ODD='#fafafa', HOVER='#f5f5f5', BUTTON='#fbfbfb', PRESSED='#ededed', EDGE='#d1d1d1',
                  FIELD_EDGE='#c8c8c8', THUMB='#e0e0e0', THUMB_HOVER='#cfcfcf', DISABLED='#a0a0a0',
-                 DISABLED_BG='#e0e0e0', BOX_EDGE='#8a8a8a', BOX_EDGE_HOVER='#5f5f5f', CHANGED='#fff4ce')
+                 DISABLED_BG='#e0e0e0', BOX_EDGE='#8a8a8a', BOX_EDGE_HOVER='#5f5f5f', CHANGED='#fff4ce',
+                 WARN='#9d5d00')
     DARK = dict(BG='#202020', CARD='#2b2b2b', LINE='#3b3b3b', TEXT='#f2f2f2', MUTED='#b0b0b0', FAINT='#8f8f8f',
                 ACCENT='#0078d4', ACCENT_HOVER='#1a86d9', ACCENT_DOWN='#006cbe', SELECTED='#204a6e', BAD='#ff99a4',
                 ODD='#303030', HOVER='#383838', BUTTON='#373737', PRESSED='#2f2f2f', EDGE='#4a4a4a',
                 FIELD_EDGE='#5a5a5a', THUMB='#4a4a4a', THUMB_HOVER='#5c5c5c', DISABLED='#6f6f6f',
-                DISABLED_BG='#3a3a3a', BOX_EDGE='#9a9a9a', BOX_EDGE_HOVER='#c8c8c8', CHANGED='#4d4223')
+                DISABLED_BG='#3a3a3a', BOX_EDGE='#9a9a9a', BOX_EDGE_HOVER='#c8c8c8', CHANGED='#4d4223',
+                WARN='#fce100')
     locals().update(LIGHT)  # class defaults; __init__ switches to DARK when chosen
     STATE_COLOURS = (('claimed', '#0f7b0f'), ('not plugged in', '#8a8a8a'), ('', '#c45500'))  # first match wins
+    BADGE = 40  # pixels: a figure's picture in the slot list (the thumbnails are 96 x 96)
     QUIET = re.compile(r'\S+ (portal [<-]|GET_DESCRIPTOR|SET_CONFIGURATION|UNLINK|portal sound: \d)')  # portalsync.log only
     BAD_LINE = re.compile(r'FAILED|failed|in use|lost|error|not copied|not written|could not|did NOT', re.I)
 
@@ -2470,7 +2568,7 @@ class App:
         self.real = ttk.Label(pill, style='Card.TLabel')
         self.real.pack(side='left')
         if mirror:
-            ttk.Button(header, text='Settings…', command=self.open_settings).grid(
+            ttk.Button(header, text='Settings…', style='Quiet.TButton', command=self.open_settings).grid(
                 row=0, column=2, rowspan=2, sticky='e', padx=(18, 0))
             ttk.Button(header, text='Start game…', style='Accent.TButton', command=self.open_games).grid(
                 row=0, column=3, rowspan=2, sticky='e', padx=(8, 0))
@@ -2492,13 +2590,19 @@ class App:
         cols = (('slot', 'SLOT', 60), ('figure', 'FIGURE', 190), ('details', 'DETAILS', 150), ('save', 'SAVE', 150),
                 ('source', 'SOURCE', 170))
         self.detail_cache = {}  # figure image -> 'level 11 · 2,594 gold' (decrypting every 200 ms is wasteful)
+        self.badges = {}  # ('id:variant', element) -> the slot list's picture (badge)
+        self.slot_names = {}  # virtual slot (from 1) -> the figure last seen there, for the Activity pane
         table = ttk.Frame(portal, style='Card.TFrame')
         table.pack(fill='both', expand=True, pady=(12, 0))
-        self.tree = ttk.Treeview(table, columns=[c[0] for c in cols], show='headings', height=8)
+        # each figure stands on a small portal in its element's colour (badge); the slot number is in the details
+        self.tree = ttk.Treeview(table, columns=[c[0] for c in cols], displaycolumns=[c[0] for c in cols[1:]],
+                                 show=('tree', 'headings'), height=6, style='Portal.Treeview')
+        self.tree.column('#0', width=self.BADGE + 22, minwidth=self.BADGE + 22, stretch=False, anchor='w')
         for key, title, width in cols:
             self.tree.heading(key, text=title, anchor='w')
             self.tree.column(key, width=width, minwidth=width, anchor='w', stretch=key == 'source')
-        self.tree.tag_configure('odd', background=self.ODD)
+        self.tree.tag_configure('saving', foreground=self.WARN)  # a save is being written: keep it on the portal
+        self.tree.tag_configure('attention', foreground=self.BAD)  # a save could not be written
         self.tree.pack(fill='both', expand=True)
         self.tree.bind('<Button-3>', self.figure_menu)  # right-click: what you can do with that figure
         self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_details())
@@ -2536,10 +2640,12 @@ class App:
             logbox.pack(fill='x', pady=(8, 0)) if open_ else logbox.pack_forget()
         fold.bind('<Button-1>', lambda e: (show_log_lines(not log_open[0]), self.remember(log_open=log_open[0])))
         show_log_lines(log_open[0])
-        self.log = tk.Text(logbox, height=8, wrap='word', font=('Consolas', 9), relief='flat', borderwidth=0,
+        self.log = tk.Text(logbox, height=8, wrap='word', font=('Segoe UI', 9), relief='flat', borderwidth=0,
                            background=self.CARD, foreground=self.TEXT, highlightthickness=0, state='disabled',
                            selectbackground=self.SELECTED, selectforeground=self.TEXT)
-        self.log.tag_configure('time', foreground=self.FAINT)
+        self.log.tag_configure('time', foreground=self.FAINT, font=('Segoe UI', 8))
+        self.log.configure(spacing1=2, spacing3=2)
+        self.last_plain = None  # the Activity pane leaves out a line that repeats the one before (plain_line)
         self.log.tag_configure('bad', foreground=self.BAD)
         scroll = ttk.Scrollbar(logbox, command=self.log.yview)
         self.log.configure(yscrollcommand=scroll.set)
@@ -2594,6 +2700,8 @@ class App:
         s.map('TButton', **{k: [('pressed', self.PRESSED), ('active', self.HOVER)] for k in flat('')})
         s.configure('Small.TButton', padding=(6, 0), width=0)  # as tall as an entry box and no wider than its text
         s.configure('Accent.TButton', foreground='white', bordercolor=A, **flat(A))
+        s.configure('Quiet.TButton', bordercolor=C, **flat(C))  # a secondary action that should not compete
+        s.map('Quiet.TButton', bordercolor=[('pressed', self.EDGE), ('active', self.EDGE)])
         accent_states = [('disabled', self.DISABLED_BG), ('pressed', self.ACCENT_DOWN), ('active', self.ACCENT_HOVER)]
         s.map('Accent.TButton', foreground=[('disabled', self.DISABLED)],
               **{k: accent_states for k in ('bordercolor', *flat(''))})
@@ -2615,6 +2723,8 @@ class App:
         s.map('Card.TCheckbutton', background=[('active', C)])
         s.configure('Treeview', fieldbackground=C, rowheight=int(line * 2.1), bordercolor=C, **flat(C))
         s.map('Treeview', background=[('selected', self.SELECTED)], foreground=[('selected', self.TEXT)])
+        s.configure('Portal.Treeview', rowheight=max(int(line * 2.1), self.BADGE + 8), indent=0)
+        s.layout('Portal.Treeview', [('Treeview.treearea', {'sticky': 'nswe'})])
         s.configure('Treeview.Heading', foreground=self.MUTED, font=('Segoe UI Semibold', 9), relief='flat',
                     padding=(6, 4), bordercolor=C, **flat(C))
         s.map('Treeview.Heading', background=[('active', C)])
@@ -2635,6 +2745,13 @@ class App:
         s.map('Search.TEntry', bordercolor=[('focus', A)], lightcolor=[('focus', A)])
         s.configure('Link.TLabel', background=C, foreground=A, font=('Segoe UI', 10, 'underline'))
         s.configure('Hint.TLabel', background=C, foreground=self.FAINT, font=('Segoe UI', 11))
+        # a choice of a few: buttons side by side, the chosen one filled (Look, Trap portal sound)
+        s.layout('Segment.TRadiobutton', [('Button.border', {'sticky': 'nswe', 'border': '1', 'children': [
+            ('Radiobutton.padding', {'sticky': 'nswe', 'children': [('Radiobutton.label', {'sticky': 'nswe'})]})]})])
+        s.configure('Segment.TRadiobutton', padding=(12, 4), bordercolor=self.EDGE, foreground=self.TEXT, relief='raised',
+                    **flat(self.BUTTON))
+        s.map('Segment.TRadiobutton', foreground=[('selected', 'white')],
+              bordercolor=[('selected', A)], **{k: [('selected', A), ('active', self.HOVER)] for k in flat('')})
         s.layout('Tab.TRadiobutton', [('Radiobutton.padding', {'sticky': 'nswe', 'children': [
             ('Radiobutton.label', {'sticky': 'nswe'})]})])
         s.configure('Tab.TRadiobutton', background=C, foreground=self.MUTED, padding=(12, 8), font=('Segoe UI', 10))
@@ -2690,6 +2807,7 @@ class App:
             real = {v: (i, uid) for i, (v, path, uid) in m.slots.items() if self.portal.slots[v].path == path} if m else {}
             kept = {v for v, path in m.kept.values() if self.portal.slots[v].path == path} if m else set()
             images = {n: bytes(s.data) for n, s in enumerate(self.portal.slots) if s.path}
+            self.uid_names = {bytes(s.data[:4]).hex(): figure_name(s.data) for s in self.portal.slots if s.path}
             saves = {n: self.save_state(n, real, kept) for n, s in enumerate(self.portal.slots) if s.path}
             self.save_help = {n: h for n, (_, h) in saves.items()}
             rows = {n: (n + 1, figure_name(s.data), '', saves[n][0],
@@ -2707,12 +2825,16 @@ class App:
                 except OSError as e:
                     log(f'progress.csv: {e}')
             rows[n] = rows[n][:2] + (self.detail_cache[image],) + rows[n][3:]
+        self.slot_names.update((n + 1, values[1]) for n, values in rows.items())
         if rows != self.rows:
             self.fit_columns(self.tree, list(rows.values()), self.root, extra=70)
             picked = self.tree.selection()
             self.tree.delete(*self.tree.get_children())
-            for k, (n, values) in enumerate(rows.items()):
-                self.tree.insert('', 'end', iid=str(n), values=values, tags=('odd',) if k % 2 else ())
+            for n, values in rows.items():
+                word = values[3]
+                tags = ('saving',) if word.startswith('Saving') else ('attention',) if word.startswith(
+                    ('⚠', 'Needs')) else ()
+                self.tree.insert('', 'end', iid=str(n), values=values, tags=tags, image=self.badge(images[n]))
             self.tree.selection_set([i for i in picked if self.tree.exists(i)])
             if rows:
                 self.placeholder.place_forget()
@@ -2755,15 +2877,42 @@ class App:
         new = [line for n, line in lines if n > self.log_seen and not self.QUIET.match(line)]
         if lines:
             self.log_seen = lines[-1][0]
+        names = getattr(self, 'uid_names', {})
+        new = [(line, plain_line(line[9:], names, self.slot_names)) for line in new]
+        new = [(line, text) for line, text in new if text]
         if new:
             at_end = self.log.yview()[1] >= 0.999
             self.log.configure(state='normal')
-            for line in new:
-                self.log.insert('end', line[:8], 'time', line[8:] + '\n', 'bad' if self.BAD_LINE.search(line) else ())
+            for line, text in new:
+                if text == self.last_plain:  # e.g. one "Save written" for the many blocks of one save
+                    continue
+                self.last_plain = text
+                self.log.insert('end', line[:5] + '   ', 'time', text + '\n', 'bad' if self.BAD_LINE.search(line) else ())
             self.log.delete('1.0', f'end-{LOG_LINES.maxlen + 1}l')
             self.log.configure(state='disabled')
             if at_end:
                 self.log.see('end')
+
+    def badge(self, data):
+        """The slot list's picture of a figure image (badge_png): its picture from the thumbnails folder, when there
+        is one, framed in its element's colour."""
+        import base64
+        import tkinter as tk
+        key, element = figure_key(data), element_of(data)
+        if (key, element) not in self.badges:
+            path = os.path.join(THUMBS, key.replace(':', '_') + '.png')
+            if not os.path.exists(path):  # e.g. a created figure with variant 0: the real figure's picture
+                path = (sorted(glob.glob(os.path.join(glob.escape(THUMBS), key.split(':')[0] + '_*.png'))) or [path])[0]
+            try:
+                img = tk.PhotoImage(master=self.root, file=path)
+                rgb = lambda c: tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
+                picture = [[rgb(c) for c in self.root.tk.splitlist(line)] for line in
+                           self.root.tk.splitlist(img.tk.call(img, 'data'))]
+            except tk.TclError:
+                picture = None  # no picture: the element colour alone
+            png = badge_png(self.BADGE, ELEMENT_COLOURS.get(element, NO_ELEMENT), picture)
+            self.badges[key, element] = tk.PhotoImage(master=self.root, data=base64.b64encode(png).decode())
+        return self.badges[key, element]
 
     def save_state(self, n, real, kept):  # cv held
         """(SAVE word, what it means and what to do) for virtual slot n: are its game saves on the real figure?"""
@@ -2801,7 +2950,9 @@ class App:
         uid = data[:4].hex()
         backup = (backups(uid).get(uid) or [None])[-1]
         stat = self.detail_cache.get(data, '')
-        self.details.configure(text=f'{figure_name(data)}  ·  ID {uid}' + (f'  ·  {stat}' if stat else '') + '\n'
+        element = element_of(data)
+        self.details.configure(text=f'{figure_name(data)}  ·  slot {n + 1}' + (f'  ·  {element}' if element else '')
+                               + f'  ·  ID {uid}' + (f'  ·  {stat}' if stat else '') + '\n'
                                + f'Save: {self.rows[n][3] if self.rows and n in self.rows else ""}. {self.save_help.get(n, "")}\n'
                                + f'File: {os.path.basename(path)}'  # the folder only when it isn't the figures folder
                                + ('' if os.path.normcase(os.path.dirname(path)) == os.path.normcase(DUMPS)
@@ -2826,7 +2977,8 @@ class App:
             hide()
             if not row or not col.startswith('#') or col == '#0':
                 return
-            name = tree['columns'][int(col[1:]) - 1]
+            shown = tree['displaycolumns']  # the slot list leaves out its SLOT column
+            name = (tree['columns'] if tuple(shown) == ('#all',) else shown)[int(col[1:]) - 1]
             text = str(tree.set(row, name))
             if body.measure(text) <= tree.column(name, 'width') - 12:
                 return
@@ -3886,7 +4038,7 @@ class App:
                     self.server.sound.mode = sound.get()
                 self.remember(sound=sound.get())
             for value, text in (('off', 'Off'), ('pc', 'PC speakers'), ('portal', 'Portal speaker')):
-                ttk.Radiobutton(r, text=text, value=value, variable=sound, style='Tab.TRadiobutton',
+                ttk.Radiobutton(r, text=text, value=value, variable=sound, style='Segment.TRadiobutton',
                                 command=set_sound).pack(side='right')
 
             section('Portal')
@@ -4030,7 +4182,7 @@ class App:
         theme = tk.StringVar(value='dark' if self.settings().get('dark') else 'light')
         r = row('Look')
         for value, text in (('dark', 'Dark'), ('light', 'Light')):
-            ttk.Radiobutton(r, text=text, value=value, variable=theme, style='Tab.TRadiobutton').pack(side='right')
+            ttk.Radiobutton(r, text=text, value=value, variable=theme, style='Segment.TRadiobutton').pack(side='right')
         wb = tk.BooleanVar(value=self.settings().get('write_back', True))
         r = row('Write saves to real figures', 'Game saves also go onto the figure on the real portal, not only into '
                                                'its copy on the PC. Every block is read back to check it.')
@@ -4039,7 +4191,7 @@ class App:
         r = row('Trap portal sound on', 'Where Trap Team plays the sounds of trapped villains. The portal speaker '
                                         'needs a Traptanium Portal; without one the sound plays on the PC.')
         for value, text in (('off', 'Off'), ('pc', 'PC speakers'), ('portal', 'Portal speaker')):
-            ttk.Radiobutton(r, text=text, value=value, variable=sound, style='Tab.TRadiobutton').pack(side='right')
+            ttk.Radiobutton(r, text=text, value=value, variable=sound, style='Segment.TRadiobutton').pack(side='right')
         lights = tk.BooleanVar(value=self.settings().get('lights', True))
         r = row('Lights', "The real portal's lights follow the game, as on a console.")
         ttk.Checkbutton(r, variable=lights, style='Card.TCheckbutton').pack(side='right')
