@@ -249,8 +249,8 @@ def daily_zip(keep=7):
     stay; older ones go to the Recycle Bin. Returns the new zip's path, or None (made today already, no figures)."""
     folder = os.path.join(DUMPS, 'daily backups')
     path = os.path.join(folder, time.strftime('Skylanders %Y-%m-%d.zip'))
-    if os.path.exists(path) or not any(n.endswith('.sky') for n in os.listdir(DUMPS) if os.path.isdir(DUMPS)):
-        return None
+    if os.path.exists(path) or not os.path.isdir(DUMPS) or not any(n.endswith('.sky') for n in os.listdir(DUMPS)):
+        return None  # (isdir first: before the first figure there is no dumps/ to list)
     os.makedirs(folder, exist_ok=True)
     zip_dumps(path)
     for old in sorted(glob.glob(os.path.join(glob.escape(folder), 'Skylanders ????-??-??.zip')))[:-keep]:
@@ -475,6 +475,17 @@ def move_dumps(src, dst):
             shutil.move(os.path.join(src, name), target if not os.path.exists(target) else fresh_name(target[:-4]))
             moved += 1
     return moved
+
+
+def before_edit_folder(path):
+    """Where the editor keeps what a .sky file held before an edit: beside it, but for a file in dumps/ (a loaded
+    copy, a figure kept while the real portal is away) in dumps/before edit/, out of the figure files that
+    backups(), keep_one_backup and Add Skylander go through. Made when missing."""
+    folder = os.path.dirname(os.path.abspath(path))
+    if same_folder(folder, DUMPS):
+        folder = os.path.join(DUMPS, 'before edit')
+        os.makedirs(folder, exist_ok=True)
+    return folder
 
 
 def save_dump(path, data):
@@ -1252,6 +1263,9 @@ class Mirror:
             same = v is not None and same_lineage(data, self.left.get(uid), self.server.portal.slots[v].data)
             if v is not None and not same and self.server.portal.slots[v].path == kept_path:
                 self.server.portal.remove(v)
+                if self.server.portal.slots[v].path == kept_path:  # kept loaded: its unsaved progress could go nowhere.
+                    self.known.pop(i, None)  # Never take it for this figure: write-back would mix two saves on it
+                    raise OSError(f'its copy from {os.path.basename(kept_path)} is loaded and could not be saved')
             if v is not None and self.server.portal.slots[v].path == kept_path:
                 self.slots[i] = (v, path, uid)
                 n = self.queue_sync(i) if self.write_back and same else 0
@@ -2955,7 +2969,8 @@ class App:
         self.write_button.pack(side='right')
         self.skip_button = ttk.Button(bar, command=self.next_figure)
         self.skip_button.pack(side='right', padx=(0, 8))
-        d.bind('<Return>', lambda e: self.restore_current())
+        # no <Return> here: the pop-up takes the focus from a running game, and an Enter meant for the game must
+        # never start a write (with a confirm that defaulted to Yes, two of them overwrote the figure)
         d.bind('<Escape>', lambda e: d.destroy())
 
     def show(self, copy):
@@ -3063,7 +3078,7 @@ class App:
                 f'Write {n} block(s) from {name} to figure {uid}?\n\n'
                 'This replaces the progress on the figure. What the figure holds now becomes its backup '
                 f'("... ({uid}) - before restore <time>.sky"); its older backup goes to the Recycle Bin.'),
-                icon='warning', parent=self.dialog) or not self.unsynced_ok(uid, self.dialog):
+                icon='warning', default='no', parent=self.dialog) or not self.unsynced_ok(uid, self.dialog):
             return
         try:
             self.mirror.restore(path)
@@ -3086,6 +3101,9 @@ class App:
         with self.server.cv:
             if any(s.path and os.path.normcase(s.path) == os.path.normcase(path) for s in self.portal.slots):
                 return self.say(f'{os.path.basename(path)} is already on the portal')
+            if any(s.path and bytes(s.data[:4]) == data[:4] for s in self.portal.slots):  # two copies of one figure:
+                return self.say(f'{figure_name(data)} ({data[:4].hex()}) is already on the portal, '  # the game sees two
+                                'from another file: unload it first')  # identical toys, each saving its own progress
             n = self.portal.load(data, path)
         self.say(f'{os.path.basename(path)} -> slot {n + 1}' if n is not None else 'Portal full')
         self.refresh()
@@ -4332,7 +4350,7 @@ class App:
             if not messagebox.askyesno('Put backup on figure?', (
                     f'Put the backup "{values[0]}" on {name}?\n\nThe figure now: {stats(now_info)[3:] or "—"}\n'
                     f'After this: {stats(info)[3:] or "—"}\n\nWhat the figure holds now is kept as a backup, so this can '
-                    'be undone here.'), icon='warning', parent=d) or not self.unsynced_ok(uid, d):
+                    'be undone here.'), icon='warning', default='no', parent=d) or not self.unsynced_ok(uid, d):
                 return
             try:
                 self.mirror.restore(path)
@@ -5081,7 +5099,7 @@ class FigureEditor:
                 s = app.portal.slots[self.n]
                 if s.path != key or bytes(s.data) != base:
                     raise ValueError('the game saved this figure since the editor read it: press Revert, then edit again')
-                save_dump(stamped(base, 'before edit', os.path.dirname(key)), base)  # beside it: not a figure in dumps/
+                save_dump(stamped(base, 'before edit', before_edit_folder(key)), base)
                 save_dump(key, new)
                 s.unsaved, s.attempt = None, 0
                 app.portal.remove(self.n)  # lifted and placed again: the game reads the edited figure

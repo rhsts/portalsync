@@ -116,10 +116,15 @@ def recrypt(original, plain):
 
 def repaired(data):
     """The figure with the checksums of its newest save areas made valid again, all progress kept. This is
-    what SuperChargers did to the user's Snap Shot (2026-10-11): it saved the same data with good checksums."""
+    what SuperChargers did to the user's Snap Shot (2026-10-11): it saved the same data with good checksums.
+    A trap gets its own type 3 and no second area (its villain slots run over 0x110); figures of other kinds
+    keep no checksums PortalSync knows, so they come back unchanged."""
+    k = kind_of(data)
+    if k not in ('skylander', 'vehicle', 'trap'):
+        return bytes(data)
     d = bytearray(crypt(data))
     a, b = newest(d, 0x80, 0x240, 9), newest(d, 0x110, 0x2D0, 2)
-    seal(d, a, b if any(data[b:b + 16]) else None)
+    seal(d, a, b if k != 'trap' and any(data[b:b + 16]) else None, k == 'trap')
     return recrypt(data, bytes(d))
 
 
@@ -207,6 +212,8 @@ def fix_checksums(data, plain):
 def maxed(data):
     """Level 20, 65000 gold and every upgrade the figure can have (its path kept, the first when none)."""
     f = figure_fields(data)
+    if f['kind'] != 'skylander':  # traps, vehicles, crystals and unused figures have no level, gold or upgrades
+        raise ValueError(f'only a Skylander can be maxed out, not a {FIGURE_KINDS[f["kind"]].lower()}')
     full = 0b1011011101 if 1000 <= f['id'] < 3000 else 0b1111111101  # a Swapper half: 3 basic, 2 path upgrades
     up = f['upgrades'] | full
     if f['wowpow_ok']:

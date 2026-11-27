@@ -215,7 +215,7 @@ Right-click a figure → **Edit figure…**. It works on real figures and on fil
 
 Only values proven on real figures can be changed; the others (vehicle mods, Creation Crystals) are shown read-only. [docs/FIGURE_FORMAT.md](docs/FIGURE_FORMAT.md) lists every field and how it was checked, and `verify_layout.py` checks it against your `dumps`.
 
-Nothing is written until you press **Write to figure** (or **Save**). A real figure is written like a restore: its backup first, every block checked. A file figure keeps its old copy as `… - before edit <time>.sky` and is placed again, so the game reads the change. A save is refused when the game saved the figure after the editor read it.
+Nothing is written until you press **Write to figure** (or **Save**). A real figure is written like a restore: its backup first, every block checked. A file figure keeps its old copy as `… - before edit <time>.sky` (beside the file, or in `dumps\before edit` for a file in the figures folder) and is placed again, so the game reads the change. A save is refused when the game saved the figure after the editor read it.
 
 ### Sound and lights
 
