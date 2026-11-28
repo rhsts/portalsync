@@ -2300,18 +2300,16 @@ def element_of(data):
 
 
 def badge_png(size, colour, picture=None):
-    """An RGBA PNG (bytes) of a figure for the main window's slot list: a rounded square with a ring in the figure's
+    """An RGBA PNG (bytes) of a figure for the main window's slot list: a circle with a ring in the figure's
     element colour, holding its picture (rows of (r, g, b), any size), or tinted with that colour when there is none.
     Pure Python, so no image package is needed; drawn 3 x 3 times per pixel for smooth edges and scaling."""
     import zlib
     ring_rgb = [int(colour[i:i + 2], 16) for i in (1, 3, 5)]
-    radius, ring = size * 0.22, max(2.0, size / 18)
+    ring = max(2.0, size / 15)
     src = len(picture) if picture else 0
 
-    def inside(px, py, inset):  # within the rounded square shrunk by inset
-        half, r = size / 2 - inset, radius - inset
-        qx, qy = abs(px - size / 2) - (half - r), abs(py - size / 2) - (half - r)
-        return (max(qx, 0) ** 2 + max(qy, 0) ** 2) ** 0.5 + min(max(qx, qy), 0) - r < 0
+    def inside(px, py, inset):  # within the circle shrunk by inset
+        return (px - size / 2) ** 2 + (py - size / 2) ** 2 < (size / 2 - inset) ** 2
 
     rows = []
     for y in range(size):
@@ -2504,22 +2502,23 @@ def usbip(*args):
 
 
 class App:
-    # Windows 11 colours. The window uses LIGHT, or DARK when Settings has dark mode on (from the next start).
-    LIGHT = dict(BG='#f3f3f3', CARD='#ffffff', LINE='#e5e5e5', TEXT='#1b1b1b', MUTED='#616161', FAINT='#8a8a8a',
-                 ACCENT='#0067c0', ACCENT_HOVER='#1975c5', ACCENT_DOWN='#005ba8', SELECTED='#cce4f7', BAD='#c42b1c',
-                 ODD='#fafafa', HOVER='#f5f5f5', BUTTON='#fbfbfb', PRESSED='#ededed', EDGE='#d1d1d1',
-                 FIELD_EDGE='#c8c8c8', THUMB='#e0e0e0', THUMB_HOVER='#cfcfcf', DISABLED='#a0a0a0',
-                 DISABLED_BG='#e0e0e0', BOX_EDGE='#8a8a8a', BOX_EDGE_HOVER='#5f5f5f', CHANGED='#fff4ce',
-                 WARN='#9d5d00')
-    DARK = dict(BG='#202020', CARD='#2b2b2b', LINE='#3b3b3b', TEXT='#f2f2f2', MUTED='#b0b0b0', FAINT='#8f8f8f',
-                ACCENT='#0078d4', ACCENT_HOVER='#1a86d9', ACCENT_DOWN='#006cbe', SELECTED='#204a6e', BAD='#ff99a4',
-                ODD='#303030', HOVER='#383838', BUTTON='#373737', PRESSED='#2f2f2f', EDGE='#4a4a4a',
-                FIELD_EDGE='#5a5a5a', THUMB='#4a4a4a', THUMB_HOVER='#5c5c5c', DISABLED='#6f6f6f',
-                DISABLED_BG='#3a3a3a', BOX_EDGE='#9a9a9a', BOX_EDGE_HOVER='#c8c8c8', CHANGED='#4d4223',
-                WARN='#fce100')
+    # The window's colours: greyscale with one blue for actions; colour otherwise comes only from the figures (their
+    # element) and from save states (GOOD, WARN, BAD and their light *_SOFT backgrounds). DARK when Settings says so.
+    LIGHT = dict(BG='#f4f5f7', CARD='#ffffff', LINE='#e3e6eb', TEXT='#17202b', MUTED='#586271', FAINT='#7d8693',
+                 ACCENT='#1d5fd0', ACCENT_HOVER='#2a6ddc', ACCENT_DOWN='#174ba6', ACCENT_TEXT='#ffffff',
+                 SELECTED='#e8f0fd', BAD='#b3261e', ODD='#fafbfc', HOVER='#f0f2f5', BUTTON='#ffffff', PRESSED='#e6e9ee',
+                 EDGE='#c9ced6', FIELD_EDGE='#c9ced6', THUMB='#dfe2e7', THUMB_HOVER='#c9ced6', DISABLED='#9aa2ad',
+                 DISABLED_BG='#e3e6eb', BOX_EDGE='#8a93a0', BOX_EDGE_HOVER='#586271', CHANGED='#fff3dc',
+                 WARN='#9a5a00', GOOD='#1d7a4b', GOOD_SOFT='#e6f4ec', WARN_SOFT='#fff3dc', BAD_SOFT='#fce9e7')
+    DARK = dict(BG='#16191e', CARD='#1f242b', LINE='#2f363f', TEXT='#e8ebef', MUTED='#a3acb8', FAINT='#8a94a1',
+                ACCENT='#5b93f0', ACCENT_HOVER='#77a6f3', ACCENT_DOWN='#4a80dc', ACCENT_TEXT='#0e1726',
+                SELECTED='#1f2e47', BAD='#f2867d', ODD='#232930', HOVER='#2a3039', BUTTON='#252b33', PRESSED='#2f363f',
+                EDGE='#444c57', FIELD_EDGE='#444c57', THUMB='#3a414b', THUMB_HOVER='#4a525d', DISABLED='#6b7480',
+                DISABLED_BG='#2f363f', BOX_EDGE='#7d8794', BOX_EDGE_HOVER='#a3acb8', CHANGED='#362a14',
+                WARN='#f0b04a', GOOD='#5cc48c', GOOD_SOFT='#17301f', WARN_SOFT='#362a14', BAD_SOFT='#3a1f1d')
     locals().update(LIGHT)  # class defaults; __init__ switches to DARK when chosen
-    STATE_COLOURS = (('claimed', '#0f7b0f'), ('not plugged in', '#8a8a8a'), ('', '#c45500'))  # first match wins
-    BADGE = 40  # pixels: a figure's picture in the slot list (the thumbnails are 96 x 96)
+    STATE_COLOURS = (('claimed', 'GOOD'), ('not plugged in', 'FAINT'), ('', 'WARN'))  # first match wins: a palette key
+    BADGE = 44  # pixels: a figure's picture in the slot list (the thumbnails are 96 x 96)
     QUIET = re.compile(r'\S+ (portal [<-]|GET_DESCRIPTOR|SET_CONFIGURATION|UNLINK|portal sound: \d)')  # portalsync.log only
     BAD_LINE = re.compile(r'FAILED|failed|in use|lost|error|not copied|not written|could not|did NOT', re.I)
 
@@ -2539,7 +2538,7 @@ class App:
         self.root = root = tk.Tk()
         root.title('PortalSync')
         root.configure(background=self.BG)
-        root.minsize(760, 420)
+        root.minsize(720, 480)
         icon = tk.PhotoImage(width=32, height=32)  # a portal: blue ring, light centre
         for y in range(32):
             r = [(x - 15.5) ** 2 + (y - 15.5) ** 2 for x in range(32)]
@@ -2557,21 +2556,24 @@ class App:
                 self.style(ttk.Style(root), font.nametofont('TkDefaultFont').metrics('linespace'))
             root.deiconify()
 
-        header = ttk.Frame(root, style='Card.TFrame', padding=(22, 16))
+        header = ttk.Frame(root, style='Card.TFrame', padding=(24, 14))
         header.pack(fill='x')
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text='PortalSync', style='Title.TLabel').grid(row=0, column=0, sticky='w')
-        pill = ttk.Frame(header, style='Card.TFrame')
-        pill.grid(row=0, column=1, rowspan=2, sticky='e')
-        self.dot = ttk.Label(pill, text='●', style='Card.TLabel', font=('Segoe UI', 13))
-        self.dot.pack(side='left', padx=(0, 6))
-        self.real = ttk.Label(pill, style='Card.TLabel')
-        self.real.pack(side='left')
+        state = ttk.Frame(header, style='Card.TFrame')  # the real portal: a coloured dot, its state, what that means
+        state.grid(row=0, column=0, sticky='w')
+        self.dot = tk.Canvas(state, width=10, height=10, background=self.CARD, highlightthickness=0)
+        self.dot.create_oval(1, 1, 9, 9, fill=self.FAINT, outline='', tags='dot')
+        self.dot.grid(row=0, column=0, padx=(0, 8))
+        self.real = ttk.Label(state, style='Section.TLabel')
+        self.real.grid(row=0, column=1, sticky='w')
+        self.real_sub = ttk.Label(state, style='CardMuted.TLabel')
+        self.real_sub.grid(row=1, column=1, sticky='w')
         if mirror:
-            ttk.Button(header, text='Settings…', style='Quiet.TButton', command=self.open_settings).grid(
-                row=0, column=2, rowspan=2, sticky='e', padx=(18, 0))
-            ttk.Button(header, text='Start game…', style='Accent.TButton', command=self.open_games).grid(
-                row=0, column=3, rowspan=2, sticky='e', padx=(8, 0))
+            gear = ttk.Button(header, text='⚙', style='Icon.TButton', command=self.open_settings, takefocus=False)
+            gear.grid(row=0, column=1, sticky='e', padx=(18, 0))
+            self.tip(gear, 'Settings')
+            ttk.Button(header, text='Start game', style='Accent.TButton', command=self.open_games).grid(
+                row=0, column=2, sticky='e', padx=(8, 0))
         self.update_link = ttk.Label(header, style='Link.TLabel', cursor='hand2')  # shown by refresh()
         self.new_version = None  # latest_release()'s tuple, set by the update check thread
         self.updating, self.update_done = False, queue.Queue()  # update_now's thread puts (tag, names or error)
@@ -2579,40 +2581,44 @@ class App:
             threading.Thread(target=lambda: setattr(self, 'new_version', (latest_release() or (None,))), daemon=True).start()
         tk.Frame(root, background=self.LINE, height=1).pack(fill='x')
 
-        body = ttk.Frame(root, padding=(16, 16, 16, 0))
+        body = ttk.Frame(root, style='Plain.TFrame', padding=(24, 18, 24, 0))
         body.pack(fill='both', expand=True)
-        portal = self.card(body, fill='both', expand=True)
-        top = ttk.Frame(portal, style='Card.TFrame')
+        top = ttk.Frame(body, style='Plain.TFrame')
         top.pack(fill='x')
-        ttk.Label(top, text='Virtual portal', style='Section.TLabel').pack(side='left')
-        ttk.Button(top, text='Add Skylander…', command=self.open_picker).pack(side='right')
+        ttk.Label(top, text='On the virtual portal', style='Plain.TLabel').pack(side='left')
+        self.count = ttk.Label(top, style='PlainMuted.TLabel')
+        self.count.pack(side='left', padx=(10, 0))
+        ttk.Button(top, text='Add Skylander', command=self.open_picker).pack(side='right')
 
-        cols = (('slot', 'SLOT', 60), ('figure', 'FIGURE', 190), ('details', 'DETAILS', 150), ('save', 'SAVE', 150),
-                ('source', 'SOURCE', 170))
         self.detail_cache = {}  # figure image -> 'level 11 · 2,594 gold' (decrypting every 200 ms is wasteful)
-        self.badges = {}  # ('id:variant', element) -> the slot list's picture (badge)
+        self.badges = {}  # ('id:variant', element) -> the slot list's picture (badge), or None without one
         self.slot_names = {}  # virtual slot (from 1) -> the figure last seen there, for the Activity pane
-        table = ttk.Frame(portal, style='Card.TFrame')
-        table.pack(fill='both', expand=True, pady=(12, 0))
-        # each figure stands on a small portal in its element's colour (badge); the slot number is in the details
-        self.tree = ttk.Treeview(table, columns=[c[0] for c in cols], displaycolumns=[c[0] for c in cols[1:]],
-                                 show=('tree', 'headings'), height=6, style='Portal.Treeview')
-        self.tree.column('#0', width=self.BADGE + 22, minwidth=self.BADGE + 22, stretch=False, anchor='w')
-        for key, title, width in cols:
-            self.tree.heading(key, text=title, anchor='w')
-            self.tree.column(key, width=width, minwidth=width, anchor='w', stretch=key == 'source')
-        self.tree.tag_configure('saving', foreground=self.WARN)  # a save is being written: keep it on the portal
-        self.tree.tag_configure('attention', foreground=self.BAD)  # a save could not be written
-        self.tree.pack(fill='both', expand=True)
-        self.tree.bind('<Button-3>', self.figure_menu)  # right-click: what you can do with that figure
-        self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_details())
-        self.cell_tips(self.tree)
-        self.save_help = {}  # virtual slot -> what its SAVE word means and what to do (save_state)
-        tk.Frame(portal, background=self.LINE, height=1).pack(fill='x', pady=(10, 0))
-        self.details = ttk.Label(portal, style='CardMuted.TLabel', justify='left', wraplength=700)  # show_details()
-        self.details.pack(fill='x', pady=(10, 0))
-        self.placeholder = ttk.Label(table, style='CardMuted.TLabel', justify='center',
-                                     text='No figures yet.\nPlace one on the real portal, or load a .sky file.')
+        self.picked = None  # the virtual slot of the figure clicked in the list (select_slot)
+        self.pictures = self.settings().get('pictures', True)  # figure pictures, or a dot in the element's colour
+        # the figures on the virtual portal: one row each (draw_rows), in a card that scrolls when there are many
+        edge = tk.Frame(body, background=self.LINE)
+        edge.pack(fill='both', expand=True, pady=(12, 0))
+        self.list_canvas = tk.Canvas(edge, background=self.CARD, highlightthickness=0)
+        self.list_scroll = ttk.Scrollbar(edge, command=self.list_canvas.yview)
+        self.list_canvas.configure(yscrollcommand=self.list_scroll.set)
+        self.list_canvas.pack(side='left', fill='both', expand=True, padx=1, pady=1)
+        self.slot_list = tk.Frame(self.list_canvas, background=self.CARD)
+        inside = self.list_canvas.create_window(0, 0, window=self.slot_list, anchor='nw')
+        self.list_canvas.bind('<Configure>', lambda e: (self.list_canvas.itemconfigure(inside, width=e.width),
+                                                        self.fit_list()))
+        self.slot_list.bind('<Configure>', lambda e: self.fit_list())
+        self.placeholder = tk.Label(self.list_canvas, background=self.CARD, foreground=self.MUTED, justify='center',
+                                    font=('Segoe UI', 10),
+                                    text='No figures yet.\nPlace one on the real portal, or add one with Add Skylander.')
+        self.save_help = {}  # virtual slot -> what its save state means and what to do (save_state)
+        legend = ttk.Frame(body, style='Plain.TFrame')  # what the save icons' colours mean; hover one for more
+        legend.pack(fill='x', pady=(8, 0))
+        for colour, text in (('GOOD', 'Saved to figure'), ('WARN', 'Saving, keep it on'), ('EDGE', 'On this PC only'),
+                             ('BAD', 'Needs attention')):
+            tk.Frame(legend, background=getattr(self, colour), width=9, height=9).pack(side='left', padx=(0, 6))
+            ttk.Label(legend, text=text, style='PlainMuted.TLabel', font=('Segoe UI', 9)).pack(side='left', padx=(0, 16))
+        ttk.Label(legend, text='Point at an icon for details', style='PlainMuted.TLabel', font=('Segoe UI', 9)
+                  ).pack(side='right')
         # the choices on the Settings page (open_settings), kept in settings.json
         self.wb = tk.BooleanVar(value=self.settings().get('write_back', True))  # on unless turned off
         self.volume = tk.IntVar(value=self.settings().get('volume', 100))
@@ -2626,20 +2632,36 @@ class App:
         if mirror:
             mirror.lights = self.settings().get('lights', True)
 
-        activity = self.card(body, fill='x', pady=(12, 0))
-        self.activity = activity.master  # the card's border frame: hidden when the log is switched off
-        fold = ttk.Label(activity, style='Section.TLabel', cursor='hand2')
-        fold.pack(anchor='w')
+        # Activity: one line (the newest) while folded, the whole list when open
+        edge = tk.Frame(body, background=self.LINE)
+        edge.pack(fill='x', pady=(14, 0))
+        self.activity = edge  # hidden when the log is switched off in Settings
+        activity = ttk.Frame(edge, style='Card.TFrame', padding=(16, 10))
+        activity.pack(fill='both', expand=True, padx=1, pady=1)
+        head = ttk.Frame(activity, style='Card.TFrame')
+        head.pack(fill='x')
+        fold = ttk.Label(head, style='Strong.TLabel', cursor='hand2')
+        fold.pack(side='left')
+        self.last_line = ttk.Label(head, style='CardMuted.TLabel')  # the newest line, while folded
+        more = ttk.Label(head, style='CardMuted.TLabel', cursor='hand2', font=('Segoe UI', 9))
+        more.pack(side='right')
         logbox = ttk.Frame(activity, style='Card.TFrame')
 
-        log_open = [self.settings().get('log_open', True)]
+        log_open = [self.settings().get('log_open', False)]
 
         def show_log_lines(open_):
             log_open[0] = open_
-            fold.configure(text=('▾  ' if open_ else '▸  ') + 'Activity')
-            logbox.pack(fill='x', pady=(8, 0)) if open_ else logbox.pack_forget()
-        fold.bind('<Button-1>', lambda e: (show_log_lines(not log_open[0]), self.remember(log_open=log_open[0])))
-        show_log_lines(log_open[0])
+            fold.configure(text=('▾   ' if open_ else '▸   ') + 'Activity')
+            more.configure(text='Hide' if open_ else 'Show all')
+            if open_:
+                self.last_line.pack_forget()
+                logbox.pack(fill='x', pady=(8, 0))
+                self.log.see('end')
+            else:
+                logbox.pack_forget()
+                self.last_line.pack(side='left', fill='x', expand=True, padx=(14, 8))
+        for w in (fold, more):
+            w.bind('<Button-1>', lambda e: (show_log_lines(not log_open[0]), self.remember(log_open=log_open[0])))
         self.log = tk.Text(logbox, height=8, wrap='word', font=('Segoe UI', 9), relief='flat', borderwidth=0,
                            background=self.CARD, foreground=self.TEXT, highlightthickness=0, state='disabled',
                            selectbackground=self.SELECTED, selectforeground=self.TEXT)
@@ -2651,7 +2673,8 @@ class App:
         self.log.configure(yscrollcommand=scroll.set)
         scroll.pack(side='right', fill='y')
         self.log.pack(side='left', fill='both', expand=True)
-        self.status = ttk.Label(root, style='Muted.TLabel', padding=(20, 8, 20, 10))
+        show_log_lines(log_open[0])
+        self.status = ttk.Label(root, style='Muted.TLabel', padding=(24, 8, 24, 10))
         self.status.pack(fill='x')
         if not self.show_log.get():
             self.activity.pack_forget()
@@ -2660,7 +2683,7 @@ class App:
             dark_title(root)
             root.bind_class('Toplevel', '<Map>', lambda e: dark_title(e.widget), add='+')
         if not self.settings().get('tip_shown'):
-            self.status.configure(text='Tip: right-click a figure to unload, edit, repair, reset or restore it.')
+            self.status.configure(text='Tip: click a figure to edit it or see its backups; right-click it for everything else.')
             self.remember(tip_shown=True)
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.refresh()
@@ -2696,12 +2719,20 @@ class App:
         s.configure('Title.TLabel', background=C, font=('Segoe UI Semibold', 17))
         s.configure('Section.TLabel', background=C, font=('Segoe UI Semibold', 12))
         s.configure('Figure.TLabel', background=C, font=('Segoe UI Semibold', 15))
+        s.configure('Strong.TLabel', background=C, font=('Segoe UI Semibold', 10))
+        s.configure('Plain.TFrame', background=self.BG)
+        s.configure('Plain.TLabel', background=self.BG, font=('Segoe UI Semibold', 11))
+        s.configure('PlainMuted.TLabel', background=self.BG, foreground=self.FAINT)
+        s.configure('Hint.TLabel', background=C, foreground=self.MUTED, font=('Segoe UI', 9))
         s.configure('TButton', padding=(14, 5), bordercolor=self.EDGE, **flat(self.BUTTON))
         s.map('TButton', **{k: [('pressed', self.PRESSED), ('active', self.HOVER)] for k in flat('')})
         s.configure('Small.TButton', padding=(6, 0), width=0)  # as tall as an entry box and no wider than its text
-        s.configure('Accent.TButton', foreground='white', bordercolor=A, **flat(A))
-        s.configure('Quiet.TButton', bordercolor=C, **flat(C))  # a secondary action that should not compete
+        s.configure('Accent.TButton', foreground=self.ACCENT_TEXT, bordercolor=A, font=('Segoe UI Semibold', 10), **flat(A))
+        s.configure('Quiet.TButton', bordercolor=C, foreground=self.MUTED, **flat(C))  # a secondary action that should not compete
         s.map('Quiet.TButton', bordercolor=[('pressed', self.EDGE), ('active', self.EDGE)])
+        s.configure('Icon.TButton', bordercolor=C, foreground=self.MUTED, font=('Segoe UI Symbol', 14), padding=(8, 0),
+                    width=0, **flat(C))  # the Settings gear
+        s.map('Icon.TButton', bordercolor=[('pressed', self.EDGE), ('active', self.EDGE)], foreground=[('active', self.TEXT)])
         accent_states = [('disabled', self.DISABLED_BG), ('pressed', self.ACCENT_DOWN), ('active', self.ACCENT_HOVER)]
         s.map('Accent.TButton', foreground=[('disabled', self.DISABLED)],
               **{k: accent_states for k in ('bordercolor', *flat(''))})
@@ -2712,6 +2743,17 @@ class App:
         if box not in s.element_names():
             s.element_create(box, 'image', off, ('selected', 'active', on_hover), ('selected', on),
                              ('active', off_hover), width=self.box + 10, sticky='w')
+        self.switch_images = [self.switch(round(self.box * 2), self.box + 2, on, hover) for on in (False, True)
+                              for hover in (False, True)]
+        off, off_hover, on, on_hover = self.switch_images
+        switch = 'SwitchDark.indicator' if self.BG == self.DARK['BG'] else 'Switch.indicator'
+        if switch not in s.element_names():
+            s.element_create(switch, 'image', off, ('selected', 'active', on_hover), ('selected', on),
+                             ('active', off_hover), sticky='e')
+        s.layout('Switch.TCheckbutton', [('Checkbutton.padding', {'sticky': 'nswe', 'children': [
+            (switch, {'side': 'right', 'sticky': ''})]})])  # an on/off switch at the end of a Settings row
+        s.configure('Switch.TCheckbutton', background=C, padding=0)
+        s.map('Switch.TCheckbutton', background=[('active', C)])
         s.layout('Card.TCheckbutton', [('Checkbutton.padding', {'sticky': 'nswe', 'children': [
             (box, {'side': 'left', 'sticky': ''}),
             ('Checkbutton.focus', {'side': 'left', 'sticky': 'w', 'children': [('Checkbutton.label', {'sticky': 'nswe'})]})]})])
@@ -2725,7 +2767,7 @@ class App:
         s.map('Treeview', background=[('selected', self.SELECTED)], foreground=[('selected', self.TEXT)])
         s.configure('Portal.Treeview', rowheight=max(int(line * 2.1), self.BADGE + 8), indent=0)
         s.layout('Portal.Treeview', [('Treeview.treearea', {'sticky': 'nswe'})])
-        s.configure('Treeview.Heading', foreground=self.MUTED, font=('Segoe UI Semibold', 9), relief='flat',
+        s.configure('Treeview.Heading', foreground=self.MUTED, font=('Segoe UI', 9), relief='flat',
                     padding=(6, 4), bordercolor=C, **flat(C))
         s.map('Treeview.Heading', background=[('active', C)])
         s.layout('Treeview', [('Treeview.treearea', {'sticky': 'nswe'})])  # no frame around the rows
@@ -2744,27 +2786,28 @@ class App:
         s.configure('Search.TEntry', fieldbackground=C, bordercolor=self.FIELD_EDGE, lightcolor=C, darkcolor=C, padding=(10, 7))
         s.map('Search.TEntry', bordercolor=[('focus', A)], lightcolor=[('focus', A)])
         s.configure('Link.TLabel', background=C, foreground=A, font=('Segoe UI', 10, 'underline'))
-        s.configure('Hint.TLabel', background=C, foreground=self.FAINT, font=('Segoe UI', 11))
+        s.configure('Search.TLabel', background=C, foreground=self.FAINT, font=('Segoe UI', 11))
         # a choice of a few: buttons side by side, the chosen one filled (Look, Trap portal sound)
         s.layout('Segment.TRadiobutton', [('Button.border', {'sticky': 'nswe', 'border': '1', 'children': [
             ('Radiobutton.padding', {'sticky': 'nswe', 'children': [('Radiobutton.label', {'sticky': 'nswe'})]})]})])
-        s.configure('Segment.TRadiobutton', padding=(12, 4), bordercolor=self.EDGE, foreground=self.TEXT, relief='raised',
+        s.configure('Segment.TRadiobutton', padding=(12, 4), bordercolor=self.EDGE, foreground=self.MUTED, relief='raised',
                     **flat(self.BUTTON))
-        s.map('Segment.TRadiobutton', foreground=[('selected', 'white')],
-              bordercolor=[('selected', A)], **{k: [('selected', A), ('active', self.HOVER)] for k in flat('')})
+        s.map('Segment.TRadiobutton', foreground=[('selected', A), ('active', self.TEXT)],
+              font=[('selected', ('Segoe UI Semibold', 10))],
+              bordercolor=[('selected', A)], **{k: [('selected', self.SELECTED), ('active', self.HOVER)] for k in flat('')})
         s.layout('Tab.TRadiobutton', [('Radiobutton.padding', {'sticky': 'nswe', 'children': [
             ('Radiobutton.label', {'sticky': 'nswe'})]})])
         s.configure('Tab.TRadiobutton', background=C, foreground=self.MUTED, padding=(12, 8), font=('Segoe UI', 10))
-        s.map('Tab.TRadiobutton', foreground=[('selected', A), ('active', self.TEXT)],
+        s.map('Tab.TRadiobutton', foreground=[('selected', self.TEXT), ('active', self.TEXT)],
               font=[('selected', ('Segoe UI Semibold', 10))], background=[('active', self.HOVER), ('selected', C)])
 
     def checkbox(self, n, on, hover):
-        """An n x n antialiased checkbox image on the card colour: rounded box, white tick when on."""
+        """An n x n antialiased checkbox image on the card colour: square box, white tick when on."""
         import tkinter as tk
         rgb = lambda c: [int(c[i:i + 2], 16) for i in (1, 3, 5)]
         fill = rgb(self.ACCENT_HOVER if hover else self.ACCENT) if on else rgb(self.HOVER if hover else self.CARD)
         edge = fill if on else rgb(self.BOX_EDGE_HOVER if hover else self.BOX_EDGE)
-        card, white, r, bw = rgb(self.CARD), rgb('#ffffff'), n * 0.22, max(1.0, n / 18)
+        card, white, r, bw = rgb(self.CARD), rgb('#ffffff'), 0.6, max(1.0, n / 18)  # square corners
         tick = [(0.26, 0.52), (0.43, 0.68), (0.75, 0.35)]
 
         def seg(px, py, a, b):  # distance from (px, py) to segment ab
@@ -2788,6 +2831,17 @@ class App:
                         acc = [a + v / 16 for a, v in zip(acc, c)]
                 row.append('#%02x%02x%02x' % tuple(round(v) for v in acc))
             img.put('{' + ' '.join(row) + '}', to=(0, y))
+        return img
+
+    def switch(self, w, h, on, hover):
+        """A w x h on/off switch image: a square track (the accent colour when on) with a square knob."""
+        import tkinter as tk
+        track = (self.ACCENT_HOVER if hover else self.ACCENT) if on else (self.BOX_EDGE_HOVER if hover else self.BOX_EDGE)
+        img = tk.PhotoImage(width=w, height=h)
+        img.put(track, to=(0, 0, w, h))
+        k = h - 6  # the knob, 3 px in from the edges
+        x = w - 3 - k if on else 3
+        img.put(self.CARD if not on else self.ACCENT_TEXT, to=(x, 3, x + k, 3 + k))
         return img
 
     def card(self, parent, **pack):
@@ -2827,21 +2881,13 @@ class App:
             rows[n] = rows[n][:2] + (self.detail_cache[image],) + rows[n][3:]
         self.slot_names.update((n + 1, values[1]) for n, values in rows.items())
         if rows != self.rows:
-            self.fit_columns(self.tree, list(rows.values()), self.root, extra=70)
-            picked = self.tree.selection()
-            self.tree.delete(*self.tree.get_children())
-            for n, values in rows.items():
-                word = values[3]
-                tags = ('saving',) if word.startswith('Saving') else ('attention',) if word.startswith(
-                    ('⚠', 'Needs')) else ()
-                self.tree.insert('', 'end', iid=str(n), values=values, tags=tags, image=self.badge(images[n]))
-            self.tree.selection_set([i for i in picked if self.tree.exists(i)])
+            self.rows = rows
+            self.draw_rows(images)
             if rows:
                 self.placeholder.place_forget()
             else:
-                self.placeholder.place(relx=0.5, rely=0.55, anchor='center')
-            self.rows = rows
-            self.show_details()
+                self.placeholder.place(relx=0.5, rely=0.45, anchor='center')
+            self.count.configure(text=f'{len(rows)} of {len(self.portal.slots)} slots')
         while not self.dropped.empty():  # files dropped on the window (see accept_drops)
             self.load(self.dropped.get_nowait())
         while not self.update_done.empty():
@@ -2850,17 +2896,25 @@ class App:
             tag = self.new_version[0]
             self.update_link.configure(text=f'PortalSync {tag.lstrip("v")} is available')
             self.update_link.bind('<Button-1>', lambda e: self.update_now())
-            self.update_link.grid(row=2, column=0, columnspan=2, sticky='w', pady=(6, 0))
+            self.update_link.grid(row=2, column=0, columnspan=3, sticky='w', pady=(6, 0))
             log(f'PortalSync {tag} is available (this is {VERSION}): {self.new_version[1]}')
-        warn = f' · {unsaved} figure(s) NOT saved to disk' if unsaved else ''
+        warn = f'{unsaved} figure(s) NOT saved to disk' if unsaved else ''
         if not m:  # no real portal: the line is empty but for this
-            self.real.configure(text=warn[3:])
+            self.real.configure(text=warn)
         while not self.portal.notices.empty():  # a save that failed, progress rescued to another file
             self.alert(self.portal.notices.get_nowait())
         if m:
             colour = next(c for key, c in self.STATE_COLOURS if key in m.state)
-            self.dot.configure(foreground=colour)
-            self.real.configure(text=self.short_state(m.state) + m.sync_status() + warn)
+            self.dot.itemconfigure('dot', fill=getattr(self, colour))
+            self.real.configure(text=self.short_state(m.state))
+            trouble = '. '.join(x for x in [*m.sync_status().split(' · ')[1:], warn] if x)
+            on_real = len(real)
+            self.real_sub.configure(
+                text=trouble[:1].upper() + trouble[1:] if trouble else
+                'The figures stay in the game. Saves go onto them when it is back.' if kept else
+                (f'{on_real} figure{"s" * (on_real != 1)} on the real portal, ' if 'claimed' in m.state else '')
+                + ('saves go onto the figures' if m.write_back else 'saves stay on this PC'),
+                foreground=self.BAD if trouble else self.MUTED)
             while not m.offers.empty():
                 offer = m.offers.get_nowait()
                 if self.settings().get('restore_popup', True):
@@ -2888,14 +2942,16 @@ class App:
                     continue
                 self.last_plain = text
                 self.log.insert('end', line[:5] + '   ', 'time', text + '\n', 'bad' if self.BAD_LINE.search(line) else ())
+                self.last_line.configure(text=f'{line[:5]}   {text}',
+                                         foreground=self.BAD if self.BAD_LINE.search(line) else self.MUTED)
             self.log.delete('1.0', f'end-{LOG_LINES.maxlen + 1}l')
             self.log.configure(state='disabled')
             if at_end:
                 self.log.see('end')
 
     def badge(self, data):
-        """The slot list's picture of a figure image (badge_png): its picture from the thumbnails folder, when there
-        is one, framed in its element's colour."""
+        """The slot list's picture of a figure image (badge_png): its picture from the thumbnails folder, framed in
+        its element's colour; None when there is no picture or pictures are off (Settings)."""
         import base64
         import tkinter as tk
         key, element = figure_key(data), element_of(data)
@@ -2909,9 +2965,9 @@ class App:
                 picture = [[rgb(c) for c in self.root.tk.splitlist(line)] for line in
                            self.root.tk.splitlist(img.tk.call(img, 'data'))]
             except tk.TclError:
-                picture = None  # no picture: the element colour alone
-            png = badge_png(self.BADGE, ELEMENT_COLOURS.get(element, NO_ELEMENT), picture)
-            self.badges[key, element] = tk.PhotoImage(master=self.root, data=base64.b64encode(png).decode())
+                picture = None  # no picture: draw_rows shows a dot in the element's colour instead
+            png = picture and self.pictures and badge_png(self.BADGE, ELEMENT_COLOURS.get(element, NO_ELEMENT), picture)
+            self.badges[key, element] = png and tk.PhotoImage(master=self.root, data=base64.b64encode(png).decode())
         return self.badges[key, element]
 
     def save_state(self, n, real, kept):  # cv held
@@ -2939,25 +2995,180 @@ class App:
         return 'Saved on PC only', ('"Write saves to real figures" is off (Settings), so the latest saves are only in '
                                     'the copy on this PC. Turn it on to write them to the figure.')
 
-    def show_details(self):
-        """The panel under the list: the selected figure's progress, where its saves are, its file and backup."""
-        n = next(iter(map(int, self.tree.selection())), None)
-        with self.server.cv:
-            s = self.portal.slots[n] if n is not None else None
-            path, data = (s.path, bytes(s.data)) if s is not None and s.path else (None, None)
-        if path is None:
-            return self.details.configure(text='Select a figure to see its details. Right-click it for more.')
-        uid = data[:4].hex()
-        backup = (backups(uid).get(uid) or [None])[-1]
-        stat = self.detail_cache.get(data, '')
-        element = element_of(data)
-        self.details.configure(text=f'{figure_name(data)}  ·  slot {n + 1}' + (f'  ·  {element}' if element else '')
-                               + f'  ·  ID {uid}' + (f'  ·  {stat}' if stat else '') + '\n'
-                               + f'Save: {self.rows[n][3] if self.rows and n in self.rows else ""}. {self.save_help.get(n, "")}\n'
-                               + f'File: {os.path.basename(path)}'  # the folder only when it isn't the figures folder
-                               + ('' if os.path.normcase(os.path.dirname(path)) == os.path.normcase(DUMPS)
-                                  else f'  (in {os.path.dirname(path)})')
-                               + '\nBackup: ' + (os.path.basename(backup) if backup else 'none yet'))
+    def draw_rows(self, images):
+        """The slot list: one row per figure on the virtual portal (self.rows), with its picture (or a dot in its
+        element's colour), name, progress, where it comes from and an icon for its save state. A click selects
+        it and shows what can be done with it; a right-click opens the full menu."""
+        import tkinter as tk
+        for w in self.slot_list.winfo_children():
+            w.destroy()
+        self.row_parts = {}
+        if self.picked not in self.rows:
+            self.picked = None
+        for k, (n, (slot, name, details, word, source)) in enumerate(self.rows.items()):
+            if k:
+                tk.Frame(self.slot_list, background=self.LINE, height=1).pack(fill='x')
+            row = tk.Frame(self.slot_list, background=self.CARD)
+            row.pack(fill='x')
+            line = tk.Frame(row, background=self.CARD)
+            line.pack(fill='x', padx=16, pady=8)
+            parts = [row, line, tk.Label(line, text=str(slot), foreground=self.FAINT, font=('Segoe UI', 9), width=2,
+                                         anchor='w')]
+            parts[-1].pack(side='left')
+            picture = self.badge(images[n])
+            element = element_of(images[n])
+            if picture:
+                parts.append(tk.Label(line, image=picture))
+                parts[-1].pack(side='left', padx=(6, 12))
+            else:  # no picture: a dot in the element's colour, and the element's name
+                dot = tk.Canvas(line, width=10, height=10, highlightthickness=0)
+                dot.create_oval(1, 1, 9, 9, fill=ELEMENT_COLOURS.get(element, NO_ELEMENT), outline='')
+                dot.pack(side='left', padx=(6, 6))
+                parts.append(dot)
+                parts.append(tk.Label(line, text=element or ' ', foreground=self.MUTED, font=('Segoe UI', 9), width=7,
+                                      anchor='w'))
+                parts[-1].pack(side='left', padx=(0, 8))
+            texts = tk.Frame(line)
+            texts.pack(side='left', fill='x', expand=True, pady=(0 if picture else 2))
+            parts += [texts, tk.Label(texts, text=name, foreground=self.TEXT, font=('Segoe UI Semibold', 10), anchor='w'),
+                      tk.Label(texts, text=details[:1].upper() + details[1:] or ' ', foreground=self.MUTED,
+                               font=('Segoe UI', 9), anchor='w')]
+            for label in parts[-2:]:
+                label.pack(fill='x')
+            icon = self.save_icon(line, word, self.save_help.get(n, ''))
+            icon.keep_colour = True
+            icon.pack(side='right')
+            row.texts = texts  # the buttons of a selected row line up with its name (select_slot)
+            parts += [icon, tk.Label(line, text=source, foreground=self.FAINT, font=('Segoe UI', 9), anchor='w')]
+            parts[-1].pack(side='right', padx=(0, 18))
+            self.row_parts[n] = parts
+            for w in parts:
+                if w is not icon:
+                    w.configure(background=self.CARD)
+                w.bind('<Button-1>', lambda e, n=n: self.select_slot(n))
+                w.bind('<Double-1>', lambda e, n=n: (self.select_slot(n), self.edit_figure()))
+                w.bind('<Button-3>', lambda e, n=n: self.figure_menu(e, n))
+                w.bind('<MouseWheel>', lambda e: self.list_canvas.yview_scroll(-e.delta // 120 * 2, 'units'))
+        self.select_slot(self.picked)
+
+    def select_slot(self, n):
+        """Select the figure in virtual slot n (None: none): its row is highlighted and gets its buttons."""
+        import tkinter as tk
+        from tkinter import ttk
+        self.picked = n if n in (self.rows or {}) else None
+        if getattr(self, 'row_actions', None) is not None:
+            self.row_actions.destroy()
+            self.row_actions = None
+        for k, parts in getattr(self, 'row_parts', {}).items():
+            for w in parts:
+                if not getattr(w, 'keep_colour', False):  # the save icon keeps its own colour
+                    w.configure(background=self.SELECTED if k == self.picked else self.CARD)
+        if self.picked is None:
+            return
+        row = self.row_parts[self.picked][0]
+        a = self.row_actions = tk.Frame(row, background=self.SELECTED)
+        row.update_idletasks()
+        a.pack(fill='x', padx=(16 + row.texts.winfo_x(), 16), pady=(0, 12))
+        tk.Label(a, text=self.save_help.get(self.picked, ''), background=self.SELECTED, foreground=self.MUTED,
+                 font=('Segoe UI', 9), anchor='w', justify='left', wraplength=520).pack(fill='x', pady=(0, 8))
+        buttons = tk.Frame(a, background=self.SELECTED)
+        buttons.pack(fill='x')
+        for text, command in (('Edit…', self.edit_figure), ('Backups…', self.show_backups), ('Unload', self.unload_selected)):
+            ttk.Button(buttons, text=text, command=command).pack(side='left', padx=(0, 8))
+        more = ttk.Button(buttons, text='More  ▾')
+        more.configure(command=lambda: self.popup(more.winfo_rootx(), more.winfo_rooty() + more.winfo_height() + 2,
+                                                  self.figure_items(self.picked, short=True)))
+        more.pack(side='left')
+        self.root.after_idle(self.see_picked)
+
+    def see_picked(self):
+        """Scroll the slot list so the selected row (with its buttons) is in view."""
+        if self.picked is None or self.picked not in getattr(self, 'row_parts', {}):
+            return
+        row = self.row_parts[self.picked][0]
+        total = max(1, self.slot_list.winfo_height())
+        top, bottom = row.winfo_y() / total, (row.winfo_y() + row.winfo_height()) / total
+        first, last = self.list_canvas.yview()
+        if bottom > last:
+            self.list_canvas.yview_moveto(max(0, bottom - (last - first)))
+        elif top < first:
+            self.list_canvas.yview_moveto(top)
+
+    def fit_list(self):
+        """The slot list scrolls (with a scroll bar) only when its rows don't fit."""
+        c = self.list_canvas
+        c.configure(scrollregion=(0, 0, c.winfo_width(), self.slot_list.winfo_reqheight()))
+        if self.slot_list.winfo_reqheight() > c.winfo_height() + 1:
+            if not self.list_scroll.winfo_ismapped():
+                self.list_scroll.pack(side='right', fill='y', before=c)
+        elif self.list_scroll.winfo_ismapped():
+            self.list_scroll.pack_forget()
+            c.yview_moveto(0)
+
+    SAVE_LOOKS = (('✓', 'GOOD', 'check'), ('Saving', 'WARN', 'clock'), ('Waiting', 'WARN', 'clock'),
+                  ('Saved on PC', 'EDGE', 'pc'), ('', 'BAD', 'alert'))  # first match wins: SAVE word -> colour, icon
+
+    def save_icon(self, parent, word, help):
+        """A small square icon for a figure's save state (save_state), in its colour; pointing at it says what
+        the state means and what to do."""
+        import tkinter as tk
+        colour, shape = next((c, sh) for start, c, sh in self.SAVE_LOOKS if word.startswith(start))
+        soft = {'GOOD': self.GOOD_SOFT, 'WARN': self.WARN_SOFT, 'BAD': self.BAD_SOFT}.get(colour, self.BG)
+        ink = self.MUTED if colour == 'EDGE' else getattr(self, colour)
+        c = tk.Canvas(parent, width=30, height=30, background=soft, highlightthickness=1 if colour == 'EDGE' else 0,
+                      highlightbackground=self.LINE)
+        if shape == 'check':
+            c.create_line(9, 15.5, 13.5, 20, 21.5, 11, fill=ink, width=2.4, capstyle='round', joinstyle='round')
+        elif shape == 'clock':
+            c.create_oval(8, 8, 22, 22, outline=ink, width=2)
+            c.create_line(15, 11, 15, 15.5, 18.5, 17.5, fill=ink, width=2, capstyle='round')
+        elif shape == 'pc':
+            c.create_rectangle(8, 9, 22, 18, outline=ink, width=1.8)
+            c.create_line(12, 22, 18, 22, fill=ink, width=1.8)
+            c.create_line(15, 18, 15, 22, fill=ink, width=1.8)
+        else:
+            c.create_polygon(15, 7.5, 23, 21.5, 7, 21.5, outline=ink, fill='', width=2, joinstyle='round')
+            c.create_line(15, 12.5, 15, 16.5, fill=ink, width=2)
+            c.create_line(15, 18.7, 15, 19.3, fill=ink, width=2.2, capstyle='round')
+        self.tip(c, help, title=word.lstrip('✓⚠ '), colour=ink)
+        return c
+
+    def tip(self, widget, text, title=None, colour=None):
+        """A small box beside `widget` after a moment's hover: an optional coloured title, then `text` (or text()
+        when it is a function). Also used by the Settings gear and the save icons."""
+        import tkinter as tk
+        tip = {'win': None, 'job': None}
+
+        def show():
+            hide()
+            w = tip['win'] = tk.Toplevel(widget, background=self.EDGE)  # the 1 px border
+            w.overrideredirect(True)
+            w.attributes('-topmost', True)
+            inner = tk.Frame(w, background=self.CARD, padx=12, pady=8)
+            inner.pack(padx=1, pady=1)
+            if title:
+                tk.Label(inner, text=title, background=self.CARD, foreground=colour or self.TEXT,
+                         font=('Segoe UI Semibold', 10), anchor='w').pack(fill='x')
+            body = text() if callable(text) else text
+            if body:
+                tk.Label(inner, text=body, background=self.CARD, foreground=self.MUTED if title else self.TEXT,
+                         font=('Segoe UI', 9), wraplength=300, justify='left', anchor='w').pack(fill='x')
+            w.update_idletasks()
+            right = monitor_area(widget.winfo_rootx(), widget.winfo_rooty())[2]
+            x = min(widget.winfo_rootx(), right - w.winfo_reqwidth() - 8)
+            w.geometry(f'+{x}+{widget.winfo_rooty() + widget.winfo_height() + 6}')
+
+        def hide(*_):
+            if tip['job']:
+                widget.after_cancel(tip['job'])
+                tip['job'] = None
+            if tip['win'] is not None and tip['win'].winfo_exists():
+                tip['win'].destroy()
+            tip['win'] = None
+        widget.bind('<Enter>', lambda e: tip.__setitem__('job', widget.after(350, show)), add='+')
+        widget.bind('<Leave>', hide, add='+')
+        widget.bind('<Destroy>', hide, add='+')
+        widget.show_tip = show  # for screenshots and tests
 
     def cell_tips(self, tree):
         """Show a cell's whole text in a small box when the column is too narrow for it."""
@@ -3302,7 +3513,7 @@ class App:
         box.pack(fill='x', pady=(12, 10))
         search = ttk.Entry(box, textvariable=self.query, style='Search.TEntry', font=('Segoe UI', 11))
         search.pack(fill='x')
-        hint = ttk.Label(box, text='Search Skylanders', style='Hint.TLabel')
+        hint = ttk.Label(box, text='Search by name, game or element', style='Search.TLabel')
         hint.place(x=12, rely=0.5, anchor='w')
         hint.bind('<Button-1>', lambda e: search.focus_set())
 
@@ -4233,7 +4444,7 @@ class App:
 
     def selected_slot(self):
         """(virtual slot, image) of the figure selected in the slot table, or None."""
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         with self.server.cv:
             s = self.portal.slots[n] if n is not None else None
             return (n, bytes(s.data)) if s is not None and s.path and s.occupied() else None
@@ -4322,37 +4533,37 @@ class App:
         choice.trace_add('write', fill)
         fill()
 
-    def figure_menu(self, event):
-        """Right-click on the slot table: what can be done with that figure."""
-        row = self.tree.identify_row(event.y)
-        if not row:
-            return
-        self.tree.selection_set(row)
+    def figure_menu(self, event, n):
+        """Right-click on a figure in the slot list: everything that can be done with it."""
+        self.select_slot(n)
+        self.popup(event.x_root, event.y_root, self.figure_items(n))
+
+    def figure_items(self, n, short=False):
+        """The menu of the figure in virtual slot n (popup items). short: without what the row's own buttons do."""
         with self.server.cv:
-            real = any(v == int(row) and self.portal.slots[v].path == path
+            real = any(v == n and self.portal.slots[v].path == path
                        for v, path, u in (self.mirror.slots.values() if self.mirror else ()))
-            unsaved = self.portal.slots[int(row)].unsaved is not None
-        items = [('Edit figure…', self.edit_figure, True),
-                 ('Compare with…', self.compare_figure, True),
-                 ('Clone as a new figure', self.clone_figure, True),
-                 None,
-                 ('Unload', self.unload_selected, True),
-                 ('Replace with…', lambda: self.open_picker(replace=int(row)), not real),
-                 ('Progress history…', self.show_history, True),
-                 ('Backups…', self.show_backups, True)]
+            unsaved = self.portal.slots[n].unsaved is not None
+        items = [] if short else [('Edit figure…', self.edit_figure, True)]
+        items += [('Compare with…', self.compare_figure, True),
+                  ('Progress history…', self.show_history, True),
+                  ('Clone as a new figure', self.clone_figure, True),
+                  ('Replace with…', lambda: self.open_picker(replace=n), not real)]
+        if not short:
+            items += [None, ('Unload', self.unload_selected, True), ('Backups…', self.show_backups, True)]
         if unsaved:  # its own file can't be written: the progress is only in memory
             items.append(('Save copy as…', self.save_copy, True))
         if self.mirror:  # these write to the figure, so it must be on the real portal
-            items += [None, ('Repair damaged save…', self.repair_selected, real),
-                      ('Reset to a new figure…', self.reset_selected, real),
-                      ('Restore progress…', self.restore_selected_figure, real)]
-        self.popup(event.x_root, event.y_root, items)
+            items += [None, ('Restore progress…', self.restore_selected_figure, real),
+                      ('Repair damaged save…', self.repair_selected, real),
+                      ('Reset to a new figure…', self.reset_selected, real)]
+        return items
 
     def save_copy(self):
         """The selected figure's progress from memory to a file the user picks. Its own file is still behind, so
         it stays unsaved and retry_saves keeps trying."""
         from tkinter import filedialog, messagebox
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         with self.server.cv:
             s = self.portal.slots[n] if n is not None else None
             if s is None or not s.path:
@@ -4372,7 +4583,7 @@ class App:
         """Level and gold of the selected figure over time (progress_history), as a list and a small chart."""
         import tkinter as tk
         from tkinter import ttk
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         if n is None:
             return
         with self.server.cv:
@@ -4426,7 +4637,7 @@ class App:
         the figure. "Put on figure" writes one onto the real figure (like Restore), saying which way it goes."""
         import tkinter as tk
         from tkinter import messagebox, ttk
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         if n is None:
             return
         with self.server.cv:
@@ -4657,7 +4868,7 @@ class App:
     def selected_real(self, what):
         """(uid, data, name) of the figure selected in the slot table if it is on the real portal, else None."""
         from tkinter import messagebox
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         with self.server.cv:
             uid = next((u for i, (v, path, u) in self.mirror.slots.items()
                         if v == n and self.portal.slots[v].path == path), None)
@@ -4836,7 +5047,7 @@ class App:
         self.say(f'Writing an empty save (reset) to figure {uid}…')
 
     def unload_selected(self):
-        for n in map(int, self.tree.selection()):
+        for n in [self.picked] if self.picked is not None else []:
             with self.server.cv:
                 name = os.path.basename(self.portal.slots[n].path or '')
                 self.portal.remove(n)
