@@ -295,6 +295,57 @@ def compare_progress(then, now, same=False):
     return 'same progress, other small differences'
 
 
+def progress_arrow(then, now, same=False):
+    """'↑' when figure_info `then` has more progress than `now` (by experience, else by gold), '↓' when less, else ''."""
+    if same or then.kind != 'skylander' or now.kind != 'skylander':
+        return ''
+    for a, b in ((then.xp, now.xp), (then.gold, now.gold)):
+        if a is not None and b is not None and a != b:
+            return '↑' if a > b else '↓'
+    return ''
+
+
+# Save values by their plain names, for Restore and Compare; MORE: the ones where a bigger value is more progress
+FIELD_LABELS = {'name': 'Name', 'uid': 'Figure ID', 'kind': 'Kind', 'game': 'Game', 'element': 'Element',
+                'damaged': 'Damaged save', 'level': 'Level', 'xp': 'Experience', 'gold': 'Gold',
+                'time': 'Time on the portal', 'upgrades': 'Upgrades', 'placed': 'Last placed', 'nickname': 'Nickname',
+                'reset': 'First used / last reset', 'owners': 'Owner changes', 'build': 'Last game build',
+                'platforms': 'Played on', 'villains': 'Villains', 'gearbits': 'Gearbits'}
+MORE = ('level', 'xp', 'gold', 'time', 'upgrades')
+RESTORE_FIELDS = ('level', 'xp', 'gold', 'time', 'upgrades', 'placed', 'nickname', 'owners')
+
+
+def field_text(key, value):
+    """A figure_fields value as the user reads it."""
+    if key == 'upgrades' and isinstance(value, int):
+        return ', '.join(UPGRADES[i] for i in range(14) if value >> i & 1) or 'none'
+    if key in ('time', 'time_') and isinstance(value, int):
+        hours, rest = divmod(value, 3600)
+        return f'{hours:,} h {rest // 60} min' if value < 10 ** 8 else f'{value:,} s'
+    if key in ('xp', 'gold') and isinstance(value, int):
+        return f'{value:,}'
+    if key == 'villains':
+        return ', '.join(VILLAINS.get(v, str(v)) + (' (evolved)' if e else '') for v, e in value) or 'none'
+    if isinstance(value, dict):
+        return ', '.join(f'{k}: {v}' for k, v in value.items())
+    if isinstance(value, list):
+        return ', '.join(map(str, value))
+    if key == 'nickname':
+        return value or 'none'
+    return FIGURE_KINDS[value] if key == 'kind' else 'yes' if value is True else 'no' if value is False else str(value)
+
+
+def field_arrow(key, a, b):
+    """'↑' when value a is more progress than b for this field, '↓' when less, else ''."""
+    if key not in MORE or not isinstance(a, int) or not isinstance(b, int) or a == b:
+        return ''
+    if key == 'upgrades':
+        a, b = bin(a).count('1'), bin(b).count('1')
+        if a == b:
+            return ''
+    return '↑' if a > b else '↓'
+
+
 def progress_rows():
     """The lines of dumps/progress.csv: (time, uid, name, level or None, gold or None)."""
     try:
@@ -2300,18 +2351,16 @@ def element_of(data):
 
 
 def badge_png(size, colour, picture=None):
-    """An RGBA PNG (bytes) of a figure for the main window's slot list: a rounded square with a ring in the figure's
+    """An RGBA PNG (bytes) of a figure for the main window's slot list: a circle with a ring in the figure's
     element colour, holding its picture (rows of (r, g, b), any size), or tinted with that colour when there is none.
     Pure Python, so no image package is needed; drawn 3 x 3 times per pixel for smooth edges and scaling."""
     import zlib
     ring_rgb = [int(colour[i:i + 2], 16) for i in (1, 3, 5)]
-    radius, ring = size * 0.22, max(2.0, size / 18)
+    ring = max(2.0, size / 15)
     src = len(picture) if picture else 0
 
-    def inside(px, py, inset):  # within the rounded square shrunk by inset
-        half, r = size / 2 - inset, radius - inset
-        qx, qy = abs(px - size / 2) - (half - r), abs(py - size / 2) - (half - r)
-        return (max(qx, 0) ** 2 + max(qy, 0) ** 2) ** 0.5 + min(max(qx, qy), 0) - r < 0
+    def inside(px, py, inset):  # within the circle shrunk by inset
+        return (px - size / 2) ** 2 + (py - size / 2) ** 2 < (size / 2 - inset) ** 2
 
     rows = []
     for y in range(size):
@@ -2452,21 +2501,44 @@ def setup_checks(attached, emulators):
     ]
 
 
-def setup_rows(parent, checks, colours):
-    """One row per check: a green ✓, a red ✗ or a grey –, the name, and what to do."""
+def setup_rows(parent, checks, colours, width=340):
+    """One row per check, split by 1 px lines: a square mark (green ✓, red ✗ or grey – when it can't be checked
+    yet), the name, and under it what to do (or what was found)."""
     import tkinter as tk
-    grid = tk.Frame(parent, background=colours['CARD'])
+    c = colours
+    edge = tk.Frame(parent, background=c['LINE'])
+    box = tk.Frame(edge, background=c['CARD'])
+    box.pack(fill='both', expand=True, padx=1, pady=1)
     for row, (what, ok, todo) in enumerate(checks):
-        mark, colour = ('✓', '#0f7b0f') if ok else ('–', colours['FAINT']) if ok is None else ('✗', colours['BAD'])
-        tk.Label(grid, text=mark, foreground=colour, background=colours['CARD'], font=('Segoe UI Semibold', 11)).grid(
-            row=row, column=0, sticky='nw', padx=(0, 10), pady=3)
-        tk.Label(grid, text=what, foreground=colours['TEXT'], background=colours['CARD'], font=('Segoe UI', 10),
-                 anchor='w').grid(row=row, column=1, sticky='nw', pady=3)
+        if row:
+            tk.Frame(box, background=c['LINE'], height=1).pack(fill='x', padx=14)
+        r = tk.Frame(box, background=c['CARD'], padx=14, pady=10)
+        r.pack(fill='x')
+        mark, fg, bg = ('✓', 'GOOD', 'GOOD_SOFT') if ok else ('–', 'FAINT', 'LINE') if ok is None else ('✗', 'BAD', 'BAD_SOFT')
+        sign = tk.Canvas(r, width=20, height=20, background=c[bg], highlightthickness=0)
+        sign.create_text(10, 10, text=mark, fill=c[fg], font=('Segoe UI Semibold', 10))
+        sign.pack(side='left', anchor='n', padx=(0, 12))
+        words = tk.Frame(r, background=c['CARD'])
+        words.pack(side='left', fill='x', expand=True)
+        tk.Label(words, text=what, foreground=c['TEXT'], background=c['CARD'], font=('Segoe UI', 10),
+                 anchor='w').pack(fill='x')
         if todo:
-            tk.Label(grid, text=todo, foreground=colours['MUTED'] if ok else colours['TEXT'], background=colours['CARD'],
-                     font=('Segoe UI', 9), wraplength=360, justify='left', anchor='w').grid(
-                row=row, column=2, sticky='nw', padx=(16, 0), pady=4)
-    return grid
+            tk.Label(words, text=todo, foreground=c['MUTED'] if ok else c['BAD'], background=c['CARD'],
+                     font=('Segoe UI', 9), wraplength=width, justify='left', anchor='w').pack(fill='x')
+    return edge
+
+
+def dark_wanted(settings):
+    """True for dark mode: the 'dark' setting, or Windows' own app mode when it is 'system' (Like Windows)."""
+    dark = settings.get('dark')
+    if dark != 'system':
+        return bool(dark)
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize') as k:
+            return winreg.QueryValueEx(k, 'AppsUseLightTheme')[0] == 0
+    except (ImportError, OSError):
+        return False
 
 
 def setup_failed(checks):
@@ -2474,22 +2546,24 @@ def setup_failed(checks):
     own (the main window needs the virtual portal). Returns when it is closed."""
     import tkinter as tk
     import webbrowser
-    c = App.DARK if App.settings().get('dark') else App.LIGHT
+    c = App.DARK if dark_wanted(App.settings()) else App.LIGHT
     root = tk.Tk()
     root.title('PortalSync: setup')
-    root.configure(background=c['CARD'], padx=26, pady=20)
+    root.configure(background=c['BG'], padx=26, pady=20)
     root.resizable(False, False)
-    tk.Label(root, text='PortalSync can\'t start yet', background=c['CARD'], foreground=c['TEXT'],
+    tk.Label(root, text='PortalSync can\'t start yet', background=c['BG'], foreground=c['TEXT'],
              font=('Segoe UI Semibold', 15)).pack(anchor='w')
     tk.Label(root, text='Something it needs is missing. Fix the red ones, then start PortalSync again.',
-             background=c['CARD'], foreground=c['MUTED'], font=('Segoe UI', 10)).pack(anchor='w', pady=(4, 14))
-    setup_rows(root, checks, c).pack(anchor='w')
-    bar = tk.Frame(root, background=c['CARD'])
+             background=c['BG'], foreground=c['MUTED'], font=('Segoe UI', 10)).pack(anchor='w', pady=(4, 14))
+    setup_rows(root, checks, c, width=420).pack(fill='x')
+    bar = tk.Frame(root, background=c['BG'])
     bar.pack(fill='x', pady=(18, 0))
     tk.Button(bar, text='Close', command=root.destroy, relief='flat', padx=14, pady=4, background=c['ACCENT'],
-              foreground='white', activebackground=c['ACCENT_HOVER'], activeforeground='white').pack(side='right')
+              foreground=c['ACCENT_TEXT'], activebackground=c['ACCENT_HOVER'], activeforeground=c['ACCENT_TEXT'],
+              font=('Segoe UI Semibold', 10), borderwidth=0).pack(side='right')
     tk.Button(bar, text='Open the Getting started guide', command=lambda: webbrowser.open(GUIDE), relief='flat',
-              padx=14, pady=4, background=c['PRESSED'], foreground=c['TEXT']).pack(side='right', padx=(0, 8))
+              padx=14, pady=4, background=c['BUTTON'], foreground=c['TEXT'], activebackground=c['HOVER'],
+              highlightthickness=1, highlightbackground=c['EDGE'], borderwidth=0).pack(side='right', padx=(0, 8))
     root.update_idletasks()
     root.geometry(f'+{(root.winfo_screenwidth() - root.winfo_reqwidth()) // 2}+{(root.winfo_screenheight() - root.winfo_reqheight()) // 3}')
     root.mainloop()
@@ -2504,22 +2578,23 @@ def usbip(*args):
 
 
 class App:
-    # Windows 11 colours. The window uses LIGHT, or DARK when Settings has dark mode on (from the next start).
-    LIGHT = dict(BG='#f3f3f3', CARD='#ffffff', LINE='#e5e5e5', TEXT='#1b1b1b', MUTED='#616161', FAINT='#8a8a8a',
-                 ACCENT='#0067c0', ACCENT_HOVER='#1975c5', ACCENT_DOWN='#005ba8', SELECTED='#cce4f7', BAD='#c42b1c',
-                 ODD='#fafafa', HOVER='#f5f5f5', BUTTON='#fbfbfb', PRESSED='#ededed', EDGE='#d1d1d1',
-                 FIELD_EDGE='#c8c8c8', THUMB='#e0e0e0', THUMB_HOVER='#cfcfcf', DISABLED='#a0a0a0',
-                 DISABLED_BG='#e0e0e0', BOX_EDGE='#8a8a8a', BOX_EDGE_HOVER='#5f5f5f', CHANGED='#fff4ce',
-                 WARN='#9d5d00')
-    DARK = dict(BG='#202020', CARD='#2b2b2b', LINE='#3b3b3b', TEXT='#f2f2f2', MUTED='#b0b0b0', FAINT='#8f8f8f',
-                ACCENT='#0078d4', ACCENT_HOVER='#1a86d9', ACCENT_DOWN='#006cbe', SELECTED='#204a6e', BAD='#ff99a4',
-                ODD='#303030', HOVER='#383838', BUTTON='#373737', PRESSED='#2f2f2f', EDGE='#4a4a4a',
-                FIELD_EDGE='#5a5a5a', THUMB='#4a4a4a', THUMB_HOVER='#5c5c5c', DISABLED='#6f6f6f',
-                DISABLED_BG='#3a3a3a', BOX_EDGE='#9a9a9a', BOX_EDGE_HOVER='#c8c8c8', CHANGED='#4d4223',
-                WARN='#fce100')
+    # The window's colours: greyscale with one blue for actions; colour otherwise comes only from the figures (their
+    # element) and from save states (GOOD, WARN, BAD and their light *_SOFT backgrounds). DARK when Settings says so.
+    LIGHT = dict(BG='#f4f5f7', CARD='#ffffff', LINE='#e3e6eb', TEXT='#17202b', MUTED='#586271', FAINT='#7d8693',
+                 ACCENT='#1d5fd0', ACCENT_HOVER='#2a6ddc', ACCENT_DOWN='#174ba6', ACCENT_TEXT='#ffffff',
+                 SELECTED='#e8f0fd', BAD='#b3261e', ODD='#fafbfc', HOVER='#f0f2f5', BUTTON='#ffffff', PRESSED='#e6e9ee',
+                 EDGE='#c9ced6', FIELD_EDGE='#c9ced6', THUMB='#dfe2e7', THUMB_HOVER='#c9ced6', DISABLED='#9aa2ad',
+                 DISABLED_BG='#e3e6eb', BOX_EDGE='#8a93a0', BOX_EDGE_HOVER='#586271', CHANGED='#fff3dc',
+                 WARN='#9a5a00', GOOD='#1d7a4b', GOOD_SOFT='#e6f4ec', WARN_SOFT='#fff3dc', BAD_SOFT='#fce9e7')
+    DARK = dict(BG='#16191e', CARD='#1f242b', LINE='#2f363f', TEXT='#e8ebef', MUTED='#a3acb8', FAINT='#8a94a1',
+                ACCENT='#5b93f0', ACCENT_HOVER='#77a6f3', ACCENT_DOWN='#4a80dc', ACCENT_TEXT='#0e1726',
+                SELECTED='#1f2e47', BAD='#f2867d', ODD='#232930', HOVER='#2a3039', BUTTON='#252b33', PRESSED='#2f363f',
+                EDGE='#444c57', FIELD_EDGE='#444c57', THUMB='#3a414b', THUMB_HOVER='#4a525d', DISABLED='#6b7480',
+                DISABLED_BG='#2f363f', BOX_EDGE='#7d8794', BOX_EDGE_HOVER='#a3acb8', CHANGED='#362a14',
+                WARN='#f0b04a', GOOD='#5cc48c', GOOD_SOFT='#17301f', WARN_SOFT='#362a14', BAD_SOFT='#3a1f1d')
     locals().update(LIGHT)  # class defaults; __init__ switches to DARK when chosen
-    STATE_COLOURS = (('claimed', '#0f7b0f'), ('not plugged in', '#8a8a8a'), ('', '#c45500'))  # first match wins
-    BADGE = 40  # pixels: a figure's picture in the slot list (the thumbnails are 96 x 96)
+    STATE_COLOURS = (('claimed', 'GOOD'), ('not plugged in', 'FAINT'), ('', 'WARN'))  # first match wins: a palette key
+    BADGE = 44  # pixels: a figure's picture in the slot list (the thumbnails are 96 x 96)
     QUIET = re.compile(r'\S+ (portal [<-]|GET_DESCRIPTOR|SET_CONFIGURATION|UNLINK|portal sound: \d)')  # portalsync.log only
     BAD_LINE = re.compile(r'FAILED|failed|in use|lost|error|not copied|not written|could not|did NOT', re.I)
 
@@ -2534,12 +2609,12 @@ class App:
         self.dialog, self.log_seen, self.rows, self.queue, self.done, self.current = None, 0, None, [], 0, None
         self.dropped = queue.Queue()  # files dropped on the window, loaded by refresh()
         self.replace = None  # the virtual slot the picker replaces the figure of (open_picker)
-        if self.settings().get('dark'):
+        if dark_wanted(self.settings()):
             self.__dict__.update(self.DARK)
         self.root = root = tk.Tk()
         root.title('PortalSync')
         root.configure(background=self.BG)
-        root.minsize(760, 420)
+        root.minsize(720, 480)
         icon = tk.PhotoImage(width=32, height=32)  # a portal: blue ring, light centre
         for y in range(32):
             r = [(x - 15.5) ** 2 + (y - 15.5) ** 2 for x in range(32)]
@@ -2551,27 +2626,30 @@ class App:
         if first_start:  # the welcome window first; its choice of dark mode applies to the main window at once
             root.withdraw()
             self.welcome()
-            if self.settings().get('dark'):
+            if dark_wanted(self.settings()):
                 self.__dict__.update(self.DARK)
                 root.configure(background=self.BG)
                 self.style(ttk.Style(root), font.nametofont('TkDefaultFont').metrics('linespace'))
             root.deiconify()
 
-        header = ttk.Frame(root, style='Card.TFrame', padding=(22, 16))
+        header = ttk.Frame(root, style='Card.TFrame', padding=(24, 14))
         header.pack(fill='x')
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text='PortalSync', style='Title.TLabel').grid(row=0, column=0, sticky='w')
-        pill = ttk.Frame(header, style='Card.TFrame')
-        pill.grid(row=0, column=1, rowspan=2, sticky='e')
-        self.dot = ttk.Label(pill, text='●', style='Card.TLabel', font=('Segoe UI', 13))
-        self.dot.pack(side='left', padx=(0, 6))
-        self.real = ttk.Label(pill, style='Card.TLabel')
-        self.real.pack(side='left')
+        state = ttk.Frame(header, style='Card.TFrame')  # the real portal: a coloured dot, its state, what that means
+        state.grid(row=0, column=0, sticky='w')
+        self.dot = tk.Canvas(state, width=10, height=10, background=self.CARD, highlightthickness=0)
+        self.dot.create_oval(1, 1, 9, 9, fill=self.FAINT, outline='', tags='dot')
+        self.dot.grid(row=0, column=0, padx=(0, 8))
+        self.real = ttk.Label(state, style='Section.TLabel')
+        self.real.grid(row=0, column=1, sticky='w')
+        self.real_sub = ttk.Label(state, style='CardMuted.TLabel')
+        self.real_sub.grid(row=1, column=1, sticky='w')
         if mirror:
-            ttk.Button(header, text='Settings…', style='Quiet.TButton', command=self.open_settings).grid(
-                row=0, column=2, rowspan=2, sticky='e', padx=(18, 0))
-            ttk.Button(header, text='Start game…', style='Accent.TButton', command=self.open_games).grid(
-                row=0, column=3, rowspan=2, sticky='e', padx=(8, 0))
+            gear = ttk.Button(header, text='⚙', style='Icon.TButton', command=self.open_settings, takefocus=False)
+            gear.grid(row=0, column=1, sticky='e', padx=(18, 0))
+            self.tip(gear, 'Settings')
+            ttk.Button(header, text='Start game', style='Accent.TButton', command=self.open_games).grid(
+                row=0, column=2, sticky='e', padx=(8, 0))
         self.update_link = ttk.Label(header, style='Link.TLabel', cursor='hand2')  # shown by refresh()
         self.new_version = None  # latest_release()'s tuple, set by the update check thread
         self.updating, self.update_done = False, queue.Queue()  # update_now's thread puts (tag, names or error)
@@ -2579,40 +2657,44 @@ class App:
             threading.Thread(target=lambda: setattr(self, 'new_version', (latest_release() or (None,))), daemon=True).start()
         tk.Frame(root, background=self.LINE, height=1).pack(fill='x')
 
-        body = ttk.Frame(root, padding=(16, 16, 16, 0))
+        body = ttk.Frame(root, style='Plain.TFrame', padding=(24, 18, 24, 0))
         body.pack(fill='both', expand=True)
-        portal = self.card(body, fill='both', expand=True)
-        top = ttk.Frame(portal, style='Card.TFrame')
+        top = ttk.Frame(body, style='Plain.TFrame')
         top.pack(fill='x')
-        ttk.Label(top, text='Virtual portal', style='Section.TLabel').pack(side='left')
-        ttk.Button(top, text='Add Skylander…', command=self.open_picker).pack(side='right')
+        ttk.Label(top, text='On the virtual portal', style='Plain.TLabel').pack(side='left')
+        self.count = ttk.Label(top, style='PlainMuted.TLabel')
+        self.count.pack(side='left', padx=(10, 0))
+        ttk.Button(top, text='Add Skylander', command=self.open_picker).pack(side='right')
 
-        cols = (('slot', 'SLOT', 60), ('figure', 'FIGURE', 190), ('details', 'DETAILS', 150), ('save', 'SAVE', 150),
-                ('source', 'SOURCE', 170))
         self.detail_cache = {}  # figure image -> 'level 11 · 2,594 gold' (decrypting every 200 ms is wasteful)
-        self.badges = {}  # ('id:variant', element) -> the slot list's picture (badge)
+        self.badges = {}  # ('id:variant', element) -> the slot list's picture (badge), or None without one
         self.slot_names = {}  # virtual slot (from 1) -> the figure last seen there, for the Activity pane
-        table = ttk.Frame(portal, style='Card.TFrame')
-        table.pack(fill='both', expand=True, pady=(12, 0))
-        # each figure stands on a small portal in its element's colour (badge); the slot number is in the details
-        self.tree = ttk.Treeview(table, columns=[c[0] for c in cols], displaycolumns=[c[0] for c in cols[1:]],
-                                 show=('tree', 'headings'), height=6, style='Portal.Treeview')
-        self.tree.column('#0', width=self.BADGE + 22, minwidth=self.BADGE + 22, stretch=False, anchor='w')
-        for key, title, width in cols:
-            self.tree.heading(key, text=title, anchor='w')
-            self.tree.column(key, width=width, minwidth=width, anchor='w', stretch=key == 'source')
-        self.tree.tag_configure('saving', foreground=self.WARN)  # a save is being written: keep it on the portal
-        self.tree.tag_configure('attention', foreground=self.BAD)  # a save could not be written
-        self.tree.pack(fill='both', expand=True)
-        self.tree.bind('<Button-3>', self.figure_menu)  # right-click: what you can do with that figure
-        self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_details())
-        self.cell_tips(self.tree)
-        self.save_help = {}  # virtual slot -> what its SAVE word means and what to do (save_state)
-        tk.Frame(portal, background=self.LINE, height=1).pack(fill='x', pady=(10, 0))
-        self.details = ttk.Label(portal, style='CardMuted.TLabel', justify='left', wraplength=700)  # show_details()
-        self.details.pack(fill='x', pady=(10, 0))
-        self.placeholder = ttk.Label(table, style='CardMuted.TLabel', justify='center',
-                                     text='No figures yet.\nPlace one on the real portal, or load a .sky file.')
+        self.picked = None  # the virtual slot of the figure clicked in the list (select_slot)
+        self.pictures = self.settings().get('pictures', True)  # figure pictures, or a dot in the element's colour
+        # the figures on the virtual portal: one row each (draw_rows), in a card that scrolls when there are many
+        edge = tk.Frame(body, background=self.LINE)
+        edge.pack(fill='both', expand=True, pady=(12, 0))
+        self.list_canvas = tk.Canvas(edge, background=self.CARD, highlightthickness=0)
+        self.list_scroll = ttk.Scrollbar(edge, command=self.list_canvas.yview)
+        self.list_canvas.configure(yscrollcommand=self.list_scroll.set)
+        self.list_canvas.pack(side='left', fill='both', expand=True, padx=1, pady=1)
+        self.slot_list = tk.Frame(self.list_canvas, background=self.CARD)
+        inside = self.list_canvas.create_window(0, 0, window=self.slot_list, anchor='nw')
+        self.list_canvas.bind('<Configure>', lambda e: (self.list_canvas.itemconfigure(inside, width=e.width),
+                                                        self.fit_list()))
+        self.slot_list.bind('<Configure>', lambda e: self.fit_list())
+        self.placeholder = tk.Label(self.list_canvas, background=self.CARD, foreground=self.MUTED, justify='center',
+                                    font=('Segoe UI', 10),
+                                    text='No figures yet.\nPlace one on the real portal, or add one with Add Skylander.')
+        self.save_help = {}  # virtual slot -> what its save state means and what to do (save_state)
+        legend = ttk.Frame(body, style='Plain.TFrame')  # what the save icons' colours mean; hover one for more
+        legend.pack(fill='x', pady=(8, 0))
+        for colour, text in (('GOOD', 'Saved to figure'), ('WARN', 'Saving, keep it on'), ('EDGE', 'On this PC only'),
+                             ('BAD', 'Needs attention')):
+            tk.Frame(legend, background=getattr(self, colour), width=9, height=9).pack(side='left', padx=(0, 6))
+            ttk.Label(legend, text=text, style='PlainMuted.TLabel', font=('Segoe UI', 9)).pack(side='left', padx=(0, 16))
+        ttk.Label(legend, text='Point at an icon for details', style='PlainMuted.TLabel', font=('Segoe UI', 9)
+                  ).pack(side='right')
         # the choices on the Settings page (open_settings), kept in settings.json
         self.wb = tk.BooleanVar(value=self.settings().get('write_back', True))  # on unless turned off
         self.volume = tk.IntVar(value=self.settings().get('volume', 100))
@@ -2626,20 +2708,36 @@ class App:
         if mirror:
             mirror.lights = self.settings().get('lights', True)
 
-        activity = self.card(body, fill='x', pady=(12, 0))
-        self.activity = activity.master  # the card's border frame: hidden when the log is switched off
-        fold = ttk.Label(activity, style='Section.TLabel', cursor='hand2')
-        fold.pack(anchor='w')
+        # Activity: one line (the newest) while folded, the whole list when open
+        edge = tk.Frame(body, background=self.LINE)
+        edge.pack(fill='x', pady=(14, 0))
+        self.activity = edge  # hidden when the log is switched off in Settings
+        activity = ttk.Frame(edge, style='Card.TFrame', padding=(16, 10))
+        activity.pack(fill='both', expand=True, padx=1, pady=1)
+        head = ttk.Frame(activity, style='Card.TFrame')
+        head.pack(fill='x')
+        fold = ttk.Label(head, style='Strong.TLabel', cursor='hand2')
+        fold.pack(side='left')
+        self.last_line = ttk.Label(head, style='CardMuted.TLabel')  # the newest line, while folded
+        more = ttk.Label(head, style='CardMuted.TLabel', cursor='hand2', font=('Segoe UI', 9))
+        more.pack(side='right')
         logbox = ttk.Frame(activity, style='Card.TFrame')
 
-        log_open = [self.settings().get('log_open', True)]
+        log_open = [self.settings().get('log_open', False)]
 
         def show_log_lines(open_):
             log_open[0] = open_
-            fold.configure(text=('▾  ' if open_ else '▸  ') + 'Activity')
-            logbox.pack(fill='x', pady=(8, 0)) if open_ else logbox.pack_forget()
-        fold.bind('<Button-1>', lambda e: (show_log_lines(not log_open[0]), self.remember(log_open=log_open[0])))
-        show_log_lines(log_open[0])
+            fold.configure(text=('▾   ' if open_ else '▸   ') + 'Activity')
+            more.configure(text='Hide' if open_ else 'Show all')
+            if open_:
+                self.last_line.pack_forget()
+                logbox.pack(fill='x', pady=(8, 0))
+                self.log.see('end')
+            else:
+                logbox.pack_forget()
+                self.last_line.pack(side='left', fill='x', expand=True, padx=(14, 8))
+        for w in (fold, more):
+            w.bind('<Button-1>', lambda e: (show_log_lines(not log_open[0]), self.remember(log_open=log_open[0])))
         self.log = tk.Text(logbox, height=8, wrap='word', font=('Segoe UI', 9), relief='flat', borderwidth=0,
                            background=self.CARD, foreground=self.TEXT, highlightthickness=0, state='disabled',
                            selectbackground=self.SELECTED, selectforeground=self.TEXT)
@@ -2651,16 +2749,17 @@ class App:
         self.log.configure(yscrollcommand=scroll.set)
         scroll.pack(side='right', fill='y')
         self.log.pack(side='left', fill='both', expand=True)
-        self.status = ttk.Label(root, style='Muted.TLabel', padding=(20, 8, 20, 10))
+        show_log_lines(log_open[0])
+        self.status = ttk.Label(root, style='Muted.TLabel', padding=(24, 8, 24, 10))
         self.status.pack(fill='x')
         if not self.show_log.get():
             self.activity.pack_forget()
-        if self.settings().get('dark'):  # dark title bars too, for this window and every one it opens
+        if dark_wanted(self.settings()):  # dark title bars too, for this window and every one it opens
             root.update_idletasks()
             dark_title(root)
             root.bind_class('Toplevel', '<Map>', lambda e: dark_title(e.widget), add='+')
         if not self.settings().get('tip_shown'):
-            self.status.configure(text='Tip: right-click a figure to unload, edit, repair, reset or restore it.')
+            self.status.configure(text='Tip: click a figure to edit it or see its backups; right-click it for everything else.')
             self.remember(tip_shown=True)
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.refresh()
@@ -2696,12 +2795,22 @@ class App:
         s.configure('Title.TLabel', background=C, font=('Segoe UI Semibold', 17))
         s.configure('Section.TLabel', background=C, font=('Segoe UI Semibold', 12))
         s.configure('Figure.TLabel', background=C, font=('Segoe UI Semibold', 15))
+        s.configure('Strong.TLabel', background=C, font=('Segoe UI Semibold', 10))
+        s.configure('Plain.TFrame', background=self.BG)
+        s.configure('Plain.TLabel', background=self.BG, font=('Segoe UI Semibold', 11))
+        s.configure('PlainMuted.TLabel', background=self.BG, foreground=self.FAINT)
+        s.configure('PlainStrong.TLabel', background=self.BG, font=('Segoe UI Semibold', 10))
+        s.configure('PlainTitle.TLabel', background=self.BG, font=('Segoe UI Semibold', 17))
+        s.configure('Hint.TLabel', background=C, foreground=self.MUTED, font=('Segoe UI', 9))
         s.configure('TButton', padding=(14, 5), bordercolor=self.EDGE, **flat(self.BUTTON))
         s.map('TButton', **{k: [('pressed', self.PRESSED), ('active', self.HOVER)] for k in flat('')})
         s.configure('Small.TButton', padding=(6, 0), width=0)  # as tall as an entry box and no wider than its text
-        s.configure('Accent.TButton', foreground='white', bordercolor=A, **flat(A))
-        s.configure('Quiet.TButton', bordercolor=C, **flat(C))  # a secondary action that should not compete
+        s.configure('Accent.TButton', foreground=self.ACCENT_TEXT, bordercolor=A, font=('Segoe UI Semibold', 10), **flat(A))
+        s.configure('Quiet.TButton', bordercolor=C, foreground=self.MUTED, **flat(C))  # a secondary action that should not compete
         s.map('Quiet.TButton', bordercolor=[('pressed', self.EDGE), ('active', self.EDGE)])
+        s.configure('Icon.TButton', bordercolor=C, foreground=self.MUTED, font=('Segoe UI Symbol', 14), padding=(8, 0),
+                    width=0, **flat(C))  # the Settings gear
+        s.map('Icon.TButton', bordercolor=[('pressed', self.EDGE), ('active', self.EDGE)], foreground=[('active', self.TEXT)])
         accent_states = [('disabled', self.DISABLED_BG), ('pressed', self.ACCENT_DOWN), ('active', self.ACCENT_HOVER)]
         s.map('Accent.TButton', foreground=[('disabled', self.DISABLED)],
               **{k: accent_states for k in ('bordercolor', *flat(''))})
@@ -2712,6 +2821,17 @@ class App:
         if box not in s.element_names():
             s.element_create(box, 'image', off, ('selected', 'active', on_hover), ('selected', on),
                              ('active', off_hover), width=self.box + 10, sticky='w')
+        self.switch_images = [self.switch(round(self.box * 2), self.box + 2, on, hover) for on in (False, True)
+                              for hover in (False, True)]
+        off, off_hover, on, on_hover = self.switch_images
+        switch = 'SwitchDark.indicator' if self.BG == self.DARK['BG'] else 'Switch.indicator'
+        if switch not in s.element_names():
+            s.element_create(switch, 'image', off, ('selected', 'active', on_hover), ('selected', on),
+                             ('active', off_hover), sticky='e')
+        s.layout('Switch.TCheckbutton', [('Checkbutton.padding', {'sticky': 'nswe', 'children': [
+            (switch, {'side': 'right', 'sticky': ''})]})])  # an on/off switch at the end of a Settings row
+        s.configure('Switch.TCheckbutton', background=C, padding=0)
+        s.map('Switch.TCheckbutton', background=[('active', C)])
         s.layout('Card.TCheckbutton', [('Checkbutton.padding', {'sticky': 'nswe', 'children': [
             (box, {'side': 'left', 'sticky': ''}),
             ('Checkbutton.focus', {'side': 'left', 'sticky': 'w', 'children': [('Checkbutton.label', {'sticky': 'nswe'})]})]})])
@@ -2725,7 +2845,7 @@ class App:
         s.map('Treeview', background=[('selected', self.SELECTED)], foreground=[('selected', self.TEXT)])
         s.configure('Portal.Treeview', rowheight=max(int(line * 2.1), self.BADGE + 8), indent=0)
         s.layout('Portal.Treeview', [('Treeview.treearea', {'sticky': 'nswe'})])
-        s.configure('Treeview.Heading', foreground=self.MUTED, font=('Segoe UI Semibold', 9), relief='flat',
+        s.configure('Treeview.Heading', foreground=self.MUTED, font=('Segoe UI', 9), relief='flat',
                     padding=(6, 4), bordercolor=C, **flat(C))
         s.map('Treeview.Heading', background=[('active', C)])
         s.layout('Treeview', [('Treeview.treearea', {'sticky': 'nswe'})])  # no frame around the rows
@@ -2744,27 +2864,28 @@ class App:
         s.configure('Search.TEntry', fieldbackground=C, bordercolor=self.FIELD_EDGE, lightcolor=C, darkcolor=C, padding=(10, 7))
         s.map('Search.TEntry', bordercolor=[('focus', A)], lightcolor=[('focus', A)])
         s.configure('Link.TLabel', background=C, foreground=A, font=('Segoe UI', 10, 'underline'))
-        s.configure('Hint.TLabel', background=C, foreground=self.FAINT, font=('Segoe UI', 11))
+        s.configure('Search.TLabel', background=C, foreground=self.FAINT, font=('Segoe UI', 11))
         # a choice of a few: buttons side by side, the chosen one filled (Look, Trap portal sound)
         s.layout('Segment.TRadiobutton', [('Button.border', {'sticky': 'nswe', 'border': '1', 'children': [
             ('Radiobutton.padding', {'sticky': 'nswe', 'children': [('Radiobutton.label', {'sticky': 'nswe'})]})]})])
-        s.configure('Segment.TRadiobutton', padding=(12, 4), bordercolor=self.EDGE, foreground=self.TEXT, relief='raised',
+        s.configure('Segment.TRadiobutton', padding=(12, 4), bordercolor=self.EDGE, foreground=self.MUTED, relief='raised',
                     **flat(self.BUTTON))
-        s.map('Segment.TRadiobutton', foreground=[('selected', 'white')],
-              bordercolor=[('selected', A)], **{k: [('selected', A), ('active', self.HOVER)] for k in flat('')})
+        s.map('Segment.TRadiobutton', foreground=[('selected', A), ('active', self.TEXT)],
+              font=[('selected', ('Segoe UI Semibold', 10))],
+              bordercolor=[('selected', A)], **{k: [('selected', self.SELECTED), ('active', self.HOVER)] for k in flat('')})
         s.layout('Tab.TRadiobutton', [('Radiobutton.padding', {'sticky': 'nswe', 'children': [
             ('Radiobutton.label', {'sticky': 'nswe'})]})])
         s.configure('Tab.TRadiobutton', background=C, foreground=self.MUTED, padding=(12, 8), font=('Segoe UI', 10))
-        s.map('Tab.TRadiobutton', foreground=[('selected', A), ('active', self.TEXT)],
+        s.map('Tab.TRadiobutton', foreground=[('selected', self.TEXT), ('active', self.TEXT)],
               font=[('selected', ('Segoe UI Semibold', 10))], background=[('active', self.HOVER), ('selected', C)])
 
     def checkbox(self, n, on, hover):
-        """An n x n antialiased checkbox image on the card colour: rounded box, white tick when on."""
+        """An n x n antialiased checkbox image on the card colour: square box, white tick when on."""
         import tkinter as tk
         rgb = lambda c: [int(c[i:i + 2], 16) for i in (1, 3, 5)]
         fill = rgb(self.ACCENT_HOVER if hover else self.ACCENT) if on else rgb(self.HOVER if hover else self.CARD)
         edge = fill if on else rgb(self.BOX_EDGE_HOVER if hover else self.BOX_EDGE)
-        card, white, r, bw = rgb(self.CARD), rgb('#ffffff'), n * 0.22, max(1.0, n / 18)
+        card, white, r, bw = rgb(self.CARD), rgb('#ffffff'), 0.6, max(1.0, n / 18)  # square corners
         tick = [(0.26, 0.52), (0.43, 0.68), (0.75, 0.35)]
 
         def seg(px, py, a, b):  # distance from (px, py) to segment ab
@@ -2788,6 +2909,17 @@ class App:
                         acc = [a + v / 16 for a, v in zip(acc, c)]
                 row.append('#%02x%02x%02x' % tuple(round(v) for v in acc))
             img.put('{' + ' '.join(row) + '}', to=(0, y))
+        return img
+
+    def switch(self, w, h, on, hover):
+        """A w x h on/off switch image: a square track (the accent colour when on) with a square knob."""
+        import tkinter as tk
+        track = (self.ACCENT_HOVER if hover else self.ACCENT) if on else (self.BOX_EDGE_HOVER if hover else self.BOX_EDGE)
+        img = tk.PhotoImage(width=w, height=h)
+        img.put(track, to=(0, 0, w, h))
+        k = h - 6  # the knob, 3 px in from the edges
+        x = w - 3 - k if on else 3
+        img.put(self.CARD if not on else self.ACCENT_TEXT, to=(x, 3, x + k, 3 + k))
         return img
 
     def card(self, parent, **pack):
@@ -2827,21 +2959,13 @@ class App:
             rows[n] = rows[n][:2] + (self.detail_cache[image],) + rows[n][3:]
         self.slot_names.update((n + 1, values[1]) for n, values in rows.items())
         if rows != self.rows:
-            self.fit_columns(self.tree, list(rows.values()), self.root, extra=70)
-            picked = self.tree.selection()
-            self.tree.delete(*self.tree.get_children())
-            for n, values in rows.items():
-                word = values[3]
-                tags = ('saving',) if word.startswith('Saving') else ('attention',) if word.startswith(
-                    ('⚠', 'Needs')) else ()
-                self.tree.insert('', 'end', iid=str(n), values=values, tags=tags, image=self.badge(images[n]))
-            self.tree.selection_set([i for i in picked if self.tree.exists(i)])
+            self.rows = rows
+            self.draw_rows(images)
             if rows:
                 self.placeholder.place_forget()
             else:
-                self.placeholder.place(relx=0.5, rely=0.55, anchor='center')
-            self.rows = rows
-            self.show_details()
+                self.placeholder.place(relx=0.5, rely=0.45, anchor='center')
+            self.count.configure(text=f'{len(rows)} of {len(self.portal.slots)} slots')
         while not self.dropped.empty():  # files dropped on the window (see accept_drops)
             self.load(self.dropped.get_nowait())
         while not self.update_done.empty():
@@ -2850,17 +2974,25 @@ class App:
             tag = self.new_version[0]
             self.update_link.configure(text=f'PortalSync {tag.lstrip("v")} is available')
             self.update_link.bind('<Button-1>', lambda e: self.update_now())
-            self.update_link.grid(row=2, column=0, columnspan=2, sticky='w', pady=(6, 0))
+            self.update_link.grid(row=2, column=0, columnspan=3, sticky='w', pady=(6, 0))
             log(f'PortalSync {tag} is available (this is {VERSION}): {self.new_version[1]}')
-        warn = f' · {unsaved} figure(s) NOT saved to disk' if unsaved else ''
+        warn = f'{unsaved} figure(s) NOT saved to disk' if unsaved else ''
         if not m:  # no real portal: the line is empty but for this
-            self.real.configure(text=warn[3:])
+            self.real.configure(text=warn)
         while not self.portal.notices.empty():  # a save that failed, progress rescued to another file
             self.alert(self.portal.notices.get_nowait())
         if m:
             colour = next(c for key, c in self.STATE_COLOURS if key in m.state)
-            self.dot.configure(foreground=colour)
-            self.real.configure(text=self.short_state(m.state) + m.sync_status() + warn)
+            self.dot.itemconfigure('dot', fill=getattr(self, colour))
+            self.real.configure(text=self.short_state(m.state))
+            trouble = '. '.join(x for x in [*m.sync_status().split(' · ')[1:], warn] if x)
+            on_real = len(real)
+            self.real_sub.configure(
+                text=trouble[:1].upper() + trouble[1:] if trouble else
+                'The figures stay in the game. Saves go onto them when it is back.' if kept else
+                (f'{on_real} figure{"s" * (on_real != 1)} on the real portal, ' if 'claimed' in m.state else '')
+                + ('saves go onto the figures' if m.write_back else 'saves stay on this PC'),
+                foreground=self.BAD if trouble else self.MUTED)
             while not m.offers.empty():
                 offer = m.offers.get_nowait()
                 if self.settings().get('restore_popup', True):
@@ -2888,18 +3020,20 @@ class App:
                     continue
                 self.last_plain = text
                 self.log.insert('end', line[:5] + '   ', 'time', text + '\n', 'bad' if self.BAD_LINE.search(line) else ())
+                self.last_line.configure(text=f'{line[:5]}   {text}',
+                                         foreground=self.BAD if self.BAD_LINE.search(line) else self.MUTED)
             self.log.delete('1.0', f'end-{LOG_LINES.maxlen + 1}l')
             self.log.configure(state='disabled')
             if at_end:
                 self.log.see('end')
 
-    def badge(self, data):
-        """The slot list's picture of a figure image (badge_png): its picture from the thumbnails folder, when there
-        is one, framed in its element's colour."""
+    def badge(self, data, size=None):
+        """The slot list's picture of a figure image (badge_png): its picture from the thumbnails folder, framed in
+        its element's colour; None when there is no picture or pictures are off (Settings)."""
         import base64
         import tkinter as tk
-        key, element = figure_key(data), element_of(data)
-        if (key, element) not in self.badges:
+        key, element, size = figure_key(data), element_of(data), size or self.BADGE
+        if (key, element, size) not in self.badges:
             path = os.path.join(THUMBS, key.replace(':', '_') + '.png')
             if not os.path.exists(path):  # e.g. a created figure with variant 0: the real figure's picture
                 path = (sorted(glob.glob(os.path.join(glob.escape(THUMBS), key.split(':')[0] + '_*.png'))) or [path])[0]
@@ -2909,10 +3043,10 @@ class App:
                 picture = [[rgb(c) for c in self.root.tk.splitlist(line)] for line in
                            self.root.tk.splitlist(img.tk.call(img, 'data'))]
             except tk.TclError:
-                picture = None  # no picture: the element colour alone
-            png = badge_png(self.BADGE, ELEMENT_COLOURS.get(element, NO_ELEMENT), picture)
-            self.badges[key, element] = tk.PhotoImage(master=self.root, data=base64.b64encode(png).decode())
-        return self.badges[key, element]
+                picture = None  # no picture: draw_rows shows a dot in the element's colour instead
+            png = picture and self.pictures and badge_png(size, ELEMENT_COLOURS.get(element, NO_ELEMENT), picture)
+            self.badges[key, element, size] = png and tk.PhotoImage(master=self.root, data=base64.b64encode(png).decode())
+        return self.badges[key, element, size]
 
     def save_state(self, n, real, kept):  # cv held
         """(SAVE word, what it means and what to do) for virtual slot n: are its game saves on the real figure?"""
@@ -2939,25 +3073,180 @@ class App:
         return 'Saved on PC only', ('"Write saves to real figures" is off (Settings), so the latest saves are only in '
                                     'the copy on this PC. Turn it on to write them to the figure.')
 
-    def show_details(self):
-        """The panel under the list: the selected figure's progress, where its saves are, its file and backup."""
-        n = next(iter(map(int, self.tree.selection())), None)
-        with self.server.cv:
-            s = self.portal.slots[n] if n is not None else None
-            path, data = (s.path, bytes(s.data)) if s is not None and s.path else (None, None)
-        if path is None:
-            return self.details.configure(text='Select a figure to see its details. Right-click it for more.')
-        uid = data[:4].hex()
-        backup = (backups(uid).get(uid) or [None])[-1]
-        stat = self.detail_cache.get(data, '')
-        element = element_of(data)
-        self.details.configure(text=f'{figure_name(data)}  ·  slot {n + 1}' + (f'  ·  {element}' if element else '')
-                               + f'  ·  ID {uid}' + (f'  ·  {stat}' if stat else '') + '\n'
-                               + f'Save: {self.rows[n][3] if self.rows and n in self.rows else ""}. {self.save_help.get(n, "")}\n'
-                               + f'File: {os.path.basename(path)}'  # the folder only when it isn't the figures folder
-                               + ('' if os.path.normcase(os.path.dirname(path)) == os.path.normcase(DUMPS)
-                                  else f'  (in {os.path.dirname(path)})')
-                               + '\nBackup: ' + (os.path.basename(backup) if backup else 'none yet'))
+    def draw_rows(self, images):
+        """The slot list: one row per figure on the virtual portal (self.rows), with its picture (or a dot in its
+        element's colour), name, progress, where it comes from and an icon for its save state. A click selects
+        it and shows what can be done with it; a right-click opens the full menu."""
+        import tkinter as tk
+        for w in self.slot_list.winfo_children():
+            w.destroy()
+        self.row_parts = {}
+        if self.picked not in self.rows:
+            self.picked = None
+        for k, (n, (slot, name, details, word, source)) in enumerate(self.rows.items()):
+            if k:
+                tk.Frame(self.slot_list, background=self.LINE, height=1).pack(fill='x')
+            row = tk.Frame(self.slot_list, background=self.CARD)
+            row.pack(fill='x')
+            line = tk.Frame(row, background=self.CARD)
+            line.pack(fill='x', padx=16, pady=8)
+            parts = [row, line, tk.Label(line, text=str(slot), foreground=self.FAINT, font=('Segoe UI', 9), width=2,
+                                         anchor='w')]
+            parts[-1].pack(side='left')
+            picture = self.badge(images[n])
+            element = element_of(images[n])
+            if picture:
+                parts.append(tk.Label(line, image=picture))
+                parts[-1].pack(side='left', padx=(6, 12))
+            else:  # no picture: a dot in the element's colour, and the element's name
+                dot = tk.Canvas(line, width=10, height=10, highlightthickness=0)
+                dot.create_oval(1, 1, 9, 9, fill=ELEMENT_COLOURS.get(element, NO_ELEMENT), outline='')
+                dot.pack(side='left', padx=(6, 6))
+                parts.append(dot)
+                parts.append(tk.Label(line, text=element or ' ', foreground=self.MUTED, font=('Segoe UI', 9), width=7,
+                                      anchor='w'))
+                parts[-1].pack(side='left', padx=(0, 8))
+            texts = tk.Frame(line)
+            texts.pack(side='left', fill='x', expand=True, pady=(0 if picture else 2))
+            parts += [texts, tk.Label(texts, text=name, foreground=self.TEXT, font=('Segoe UI Semibold', 10), anchor='w'),
+                      tk.Label(texts, text=details[:1].upper() + details[1:] or ' ', foreground=self.MUTED,
+                               font=('Segoe UI', 9), anchor='w')]
+            for label in parts[-2:]:
+                label.pack(fill='x')
+            icon = self.save_icon(line, word, self.save_help.get(n, ''))
+            icon.keep_colour = True
+            icon.pack(side='right')
+            row.texts = texts  # the buttons of a selected row line up with its name (select_slot)
+            parts += [icon, tk.Label(line, text=source, foreground=self.FAINT, font=('Segoe UI', 9), anchor='w')]
+            parts[-1].pack(side='right', padx=(0, 18))
+            self.row_parts[n] = parts
+            for w in parts:
+                if w is not icon:
+                    w.configure(background=self.CARD)
+                w.bind('<Button-1>', lambda e, n=n: self.select_slot(n))
+                w.bind('<Double-1>', lambda e, n=n: (self.select_slot(n), self.edit_figure()))
+                w.bind('<Button-3>', lambda e, n=n: self.figure_menu(e, n))
+                w.bind('<MouseWheel>', lambda e: self.list_canvas.yview_scroll(-e.delta // 120 * 2, 'units'))
+        self.select_slot(self.picked)
+
+    def select_slot(self, n):
+        """Select the figure in virtual slot n (None: none): its row is highlighted and gets its buttons."""
+        import tkinter as tk
+        from tkinter import ttk
+        self.picked = n if n in (self.rows or {}) else None
+        if getattr(self, 'row_actions', None) is not None:
+            self.row_actions.destroy()
+            self.row_actions = None
+        for k, parts in getattr(self, 'row_parts', {}).items():
+            for w in parts:
+                if not getattr(w, 'keep_colour', False):  # the save icon keeps its own colour
+                    w.configure(background=self.SELECTED if k == self.picked else self.CARD)
+        if self.picked is None:
+            return
+        row = self.row_parts[self.picked][0]
+        a = self.row_actions = tk.Frame(row, background=self.SELECTED)
+        row.update_idletasks()
+        a.pack(fill='x', padx=(16 + row.texts.winfo_x(), 16), pady=(0, 12))
+        tk.Label(a, text=self.save_help.get(self.picked, ''), background=self.SELECTED, foreground=self.MUTED,
+                 font=('Segoe UI', 9), anchor='w', justify='left', wraplength=520).pack(fill='x', pady=(0, 8))
+        buttons = tk.Frame(a, background=self.SELECTED)
+        buttons.pack(fill='x')
+        for text, command in (('Edit…', self.edit_figure), ('Backups…', self.show_backups), ('Unload', self.unload_selected)):
+            ttk.Button(buttons, text=text, command=command).pack(side='left', padx=(0, 8))
+        more = ttk.Button(buttons, text='More  ▾')
+        more.configure(command=lambda: self.popup(more.winfo_rootx(), more.winfo_rooty() + more.winfo_height() + 2,
+                                                  self.figure_items(self.picked, short=True)))
+        more.pack(side='left')
+        self.root.after_idle(self.see_picked)
+
+    def see_picked(self):
+        """Scroll the slot list so the selected row (with its buttons) is in view."""
+        if self.picked is None or self.picked not in getattr(self, 'row_parts', {}):
+            return
+        row = self.row_parts[self.picked][0]
+        total = max(1, self.slot_list.winfo_height())
+        top, bottom = row.winfo_y() / total, (row.winfo_y() + row.winfo_height()) / total
+        first, last = self.list_canvas.yview()
+        if bottom > last:
+            self.list_canvas.yview_moveto(max(0, bottom - (last - first)))
+        elif top < first:
+            self.list_canvas.yview_moveto(top)
+
+    def fit_list(self):
+        """The slot list scrolls (with a scroll bar) only when its rows don't fit."""
+        c = self.list_canvas
+        c.configure(scrollregion=(0, 0, c.winfo_width(), self.slot_list.winfo_reqheight()))
+        if self.slot_list.winfo_reqheight() > c.winfo_height() + 1:
+            if not self.list_scroll.winfo_ismapped():
+                self.list_scroll.pack(side='right', fill='y', before=c)
+        elif self.list_scroll.winfo_ismapped():
+            self.list_scroll.pack_forget()
+            c.yview_moveto(0)
+
+    SAVE_LOOKS = (('✓', 'GOOD', 'check'), ('Saving', 'WARN', 'clock'), ('Waiting', 'WARN', 'clock'),
+                  ('Saved on PC', 'EDGE', 'pc'), ('', 'BAD', 'alert'))  # first match wins: SAVE word -> colour, icon
+
+    def save_icon(self, parent, word, help):
+        """A small square icon for a figure's save state (save_state), in its colour; pointing at it says what
+        the state means and what to do."""
+        import tkinter as tk
+        colour, shape = next((c, sh) for start, c, sh in self.SAVE_LOOKS if word.startswith(start))
+        soft = {'GOOD': self.GOOD_SOFT, 'WARN': self.WARN_SOFT, 'BAD': self.BAD_SOFT}.get(colour, self.BG)
+        ink = self.MUTED if colour == 'EDGE' else getattr(self, colour)
+        c = tk.Canvas(parent, width=30, height=30, background=soft, highlightthickness=1 if colour == 'EDGE' else 0,
+                      highlightbackground=self.LINE)
+        if shape == 'check':
+            c.create_line(9, 15.5, 13.5, 20, 21.5, 11, fill=ink, width=2.4, capstyle='round', joinstyle='round')
+        elif shape == 'clock':
+            c.create_oval(8, 8, 22, 22, outline=ink, width=2)
+            c.create_line(15, 11, 15, 15.5, 18.5, 17.5, fill=ink, width=2, capstyle='round')
+        elif shape == 'pc':
+            c.create_rectangle(8, 9, 22, 18, outline=ink, width=1.8)
+            c.create_line(12, 22, 18, 22, fill=ink, width=1.8)
+            c.create_line(15, 18, 15, 22, fill=ink, width=1.8)
+        else:
+            c.create_polygon(15, 7.5, 23, 21.5, 7, 21.5, outline=ink, fill='', width=2, joinstyle='round')
+            c.create_line(15, 12.5, 15, 16.5, fill=ink, width=2)
+            c.create_line(15, 18.7, 15, 19.3, fill=ink, width=2.2, capstyle='round')
+        self.tip(c, help, title=word.lstrip('✓⚠ '), colour=ink)
+        return c
+
+    def tip(self, widget, text, title=None, colour=None):
+        """A small box beside `widget` after a moment's hover: an optional coloured title, then `text` (or text()
+        when it is a function). Also used by the Settings gear and the save icons."""
+        import tkinter as tk
+        tip = {'win': None, 'job': None}
+
+        def show():
+            hide()
+            w = tip['win'] = tk.Toplevel(widget, background=self.EDGE)  # the 1 px border
+            w.overrideredirect(True)
+            w.attributes('-topmost', True)
+            inner = tk.Frame(w, background=self.CARD, padx=12, pady=8)
+            inner.pack(padx=1, pady=1)
+            if title:
+                tk.Label(inner, text=title, background=self.CARD, foreground=colour or self.TEXT,
+                         font=('Segoe UI Semibold', 10), anchor='w').pack(fill='x')
+            body = text() if callable(text) else text
+            if body:
+                tk.Label(inner, text=body, background=self.CARD, foreground=self.MUTED if title else self.TEXT,
+                         font=('Segoe UI', 9), wraplength=300, justify='left', anchor='w').pack(fill='x')
+            w.update_idletasks()
+            right = monitor_area(widget.winfo_rootx(), widget.winfo_rooty())[2]
+            x = min(widget.winfo_rootx(), right - w.winfo_reqwidth() - 8)
+            w.geometry(f'+{x}+{widget.winfo_rooty() + widget.winfo_height() + 6}')
+
+        def hide(*_):
+            if tip['job']:
+                widget.after_cancel(tip['job'])
+                tip['job'] = None
+            if tip['win'] is not None and tip['win'].winfo_exists():
+                tip['win'].destroy()
+            tip['win'] = None
+        widget.bind('<Enter>', lambda e: tip.__setitem__('job', widget.after(350, show)), add='+')
+        widget.bind('<Leave>', hide, add='+')
+        widget.bind('<Destroy>', hide, add='+')
+        widget.show_tip = show  # for screenshots and tests
 
     def cell_tips(self, tree):
         """Show a cell's whole text in a small box when the column is too narrow for it."""
@@ -3085,20 +3374,14 @@ class App:
         ttk.Label(head, text='Restore saved progress', style='Section.TLabel').pack(side='left')
         self.counter = ttk.Label(head, style='CardMuted.TLabel')
         self.counter.pack(side='right')
-        self.figure_label = ttk.Label(body, style='Figure.TLabel')
-        self.figure_label.pack(anchor='w', pady=(16, 0))
+        self.figure_label = ttk.Label(body, style='Strong.TLabel', font=('Segoe UI Semibold', 11))
+        self.figure_label.pack(anchor='w', pady=(14, 0))
         self.uid_label = ttk.Label(body, style='CardMuted.TLabel')
         self.uid_label.pack(anchor='w')
-        facts = ttk.Frame(body, style='Card.TFrame')
-        facts.pack(fill='x', pady=(14, 0))
-        self.facts = []
-        for row, name in enumerate(('Backup', 'On the figure', 'Compared with figure')):
-            ttk.Label(facts, text=name, style='CardMuted.TLabel').grid(row=row, column=0, sticky='w', pady=2)
-            value = ttk.Label(facts, style='Card.TLabel')
-            value.grid(row=row, column=1, sticky='w', padx=(16, 0), pady=2)
-            self.facts.append(value)
-        self.explain = ttk.Label(body, style='CardMuted.TLabel', wraplength=440, justify='left')
-        self.explain.pack(anchor='w', pady=(14, 20))
+        self.values = tk.Frame(body, background=self.LINE)  # the save values side by side (show)
+        self.values.pack(fill='x', pady=(12, 0))
+        self.explain = ttk.Label(body, style='CardMuted.TLabel', wraplength=460, justify='left')
+        self.explain.pack(anchor='w', pady=(12, 18))
         tk.Frame(d, background=self.LINE, height=1).pack(fill='x')
         bar = ttk.Frame(d, padding=(24, 14))
         bar.pack(fill='x')
@@ -3113,30 +3396,58 @@ class App:
     def show(self, copy):
         path, label, when, n = copy
         name, uid = label.rsplit(' (', 1)
-        self.figure_label.configure(text=name)
-        self.uid_label.configure(text=f'Figure ID {uid[:-1]}')
+        self.figure_label.configure(text=f"Put {name}'s backup back on the figure?")
         try:
             with open(path, 'rb') as f:
-                backup = figure_info(f.read())
+                data = f.read()
+            backup = figure_info(data)
         except OSError:
-            backup = SimpleNamespace(kind='other', damaged=False)
-        real = self.mirror.figure_data(uid[:-1])
-        real = figure_info(real) if real else None
-        self.facts[0].configure(text=when + stats(backup) + (' (damaged save)' if backup.damaged else ''))
-        self.facts[1].configure(text=('damaged save' if real.damaged else (stats(real)[3:] or 'nothing saved yet'))
-                                if real else 'not on the real portal')
-        self.facts[2].configure(text=compare_progress(backup, real, not n) if real else  # more/less, not "N blocks"
-                                f'{n} block{"s" * (n != 1)} differ' if n else 'same as the figure')
+            data, backup = None, SimpleNamespace(kind='other', damaged=False)
+        self.uid_label.configure(text=f'Backup {when}  ·  figure ID {uid[:-1]}' + ('  ·  damaged save' if backup.damaged else ''))
+        now = self.mirror.figure_data(uid[:-1])
+        real = figure_info(now) if now else None
+        self.value_table(now, data)
         self.explain.configure(text=(
             "This backup's newest save is damaged: the game would refuse the figure, so it can't be written." if backup.damaged else
             'The save on the figure is damaged, so the game says "A toy on the portal has a problem". Writing this '
             'backup fixes it. What the figure holds now is kept as its backup.' if real and real.damaged else
-            'This backup has LESS progress than the figure. Writing it puts the figure back to this older state. '
+            'This backup has less progress than the figure. Writing it puts the figure back to this older state. '
             'What the figure holds now is kept as its backup, so you can undo this here.'
             if real and compare_progress(backup, real, not n).startswith('less') else
             'This backup holds progress the figure does not have. Writing it replaces the progress on the figure. '
             'What the figure holds now is kept as its backup, so you can undo this here.'))
         self.write_button.state(['!disabled'] if n and not backup.damaged else ['disabled'])
+
+    def value_table(self, now, backup):
+        """The Restore dialog's save values: what the figure holds and what the backup holds, row by row, with an
+        arrow where the backup has more (↑) or less (↓) progress. Equal values are grey."""
+        import tkinter as tk
+        box = self.values
+        for w in box.winfo_children():
+            w.destroy()
+        inner = tk.Frame(box, background=self.CARD, padx=14, pady=8)
+        inner.pack(fill='both', expand=True, padx=1, pady=1)
+        a = figure_fields(now) if now else {}
+        b = figure_fields(backup) if backup else {}
+        cell = lambda r, c, text, fg, font=('Segoe UI', 10), anchor='w': tk.Label(
+            inner, text=text, foreground=fg, background=self.CARD, font=font, anchor=anchor).grid(
+            row=r, column=c, sticky='we', padx=(0, 18) if c < 3 else 0, pady=3)
+        for c, text in enumerate(('Save value', 'On the figure', 'In the backup')):
+            cell(0, c, text, self.MUTED, ('Segoe UI', 9))
+        tk.Frame(inner, background=self.LINE, height=1).grid(row=1, column=0, columnspan=4, sticky='we', pady=(2, 4))
+        keys = [k for k in RESTORE_FIELDS if k in a or k in b]
+        if not keys:
+            cell(2, 0, 'This figure has no progress values to compare.', self.MUTED)
+        for r, key in enumerate(keys, start=2):
+            va, vb = a.get(key), b.get(key)
+            show = lambda v: '—' if v is None else f'{bin(v).count("1")} of 14' if key == 'upgrades' else field_text(key, v)
+            arrow = field_arrow(key, vb, va)
+            fg = self.TEXT if va != vb else self.FAINT
+            cell(r, 0, FIELD_LABELS.get(key, key), self.MUTED if va == vb else self.TEXT)
+            cell(r, 1, show(va), fg)
+            cell(r, 2, show(vb), fg, ('Segoe UI Semibold', 10) if arrow else ('Segoe UI', 10))
+            cell(r, 3, arrow, self.GOOD if arrow == '↑' else self.BAD, ('Segoe UI Semibold', 10))
+        inner.columnconfigure(0, weight=1)
 
     def next_figure(self, first=False):  # Skip, Close, or after a restore
         if not first:
@@ -3149,8 +3460,7 @@ class App:
         else:  # opened with the button, nothing to offer: only "Other file…"
             self.figure_label.configure(text='Nothing to restore')
             self.uid_label.configure(text='')
-            for value in self.facts:
-                value.configure(text='—')
+            self.value_table(None, None)
             self.explain.configure(text='No backup differs from the figures on the real portal. '
                                         'To write another dump, use "Other file…".')
             self.write_button.state(['disabled'])
@@ -3255,7 +3565,7 @@ class App:
 
     def open_picker(self, replace=None):
         """In-app window to add a figure: the figures in dumps/ (current copy or backup), a new blank figure of
-        any Skylander in figure_details.json, or a team. The file explorer is only behind "Browse files…".
+        any Skylander in figure_details.json, or a team. The file explorer is only behind "Open a .sky file…".
         replace: a virtual slot whose figure the picked one takes the place of (right-click, "Replace with…")."""
         import tkinter as tk
         from tkinter import ttk
@@ -3302,7 +3612,7 @@ class App:
         box.pack(fill='x', pady=(12, 10))
         search = ttk.Entry(box, textvariable=self.query, style='Search.TEntry', font=('Segoe UI', 11))
         search.pack(fill='x')
-        hint = ttk.Label(box, text='Search Skylanders', style='Hint.TLabel')
+        hint = ttk.Label(box, text='Search by name, game or element', style='Search.TLabel')
         hint.place(x=12, rely=0.5, anchor='w')
         hint.bind('<Button-1>', lambda e: search.focus_set())
 
@@ -3333,7 +3643,7 @@ class App:
         self.sort = {}  # tab -> (column, descending): a click on a column heading
         self.view = tk.StringVar(value=self.settings().get('picker_view', 'table') if os.path.isdir(THUMBS) else 'table')
         if os.path.isdir(THUMBS):  # pictures only when there is a thumbnails folder (Get pictures, or the user's own)
-            for value, text in (('pictures', 'Pictures'), ('table', 'Table')):
+            for value, text in (('pictures', 'Pictures' if self.pictures else 'Cards'), ('table', 'List')):
                 ttk.Radiobutton(self.filters, text=text, value=value, variable=self.view, style='Tab.TRadiobutton',
                                 command=lambda: (self.remember(picker_view=self.view.get()), self.fill_picker())
                                 ).pack(side='right', pady=(8, 0), padx=(0, 4))
@@ -3352,12 +3662,12 @@ class App:
         table = ttk.Frame(body, style='Card.TFrame')
         table.pack(fill='both', expand=True, pady=(6, 0))
         self.lists = {}
-        for key, cols in (('yours', (('figure', 'FIGURE', 200), ('villain', 'VILLAIN', 120), ('level', 'LEVEL', 55),
-                                     ('gold', 'GOLD', 70), ('have', 'YOU HAVE', 80), ('uid', 'ID', 85),
-                                     ('played', 'LAST PLAYED', 125), ('backup', 'BACKUP', 170))),
-                          ('all', (('figure', 'FIGURE', 280), ('game', 'GAME', 140), ('element', 'ELEMENT', 90),
-                                   ('owned', 'YOU HAVE', 90))),
-                          ('teams', (('team', 'TEAM', 160), ('size', 'SIZE', 60), ('figures', 'FIGURES', 420)))):
+        for key, cols in (('yours', (('figure', 'Skylander', 200), ('villain', 'Villain', 120), ('level', 'Level', 55),
+                                     ('gold', 'Gold', 70), ('have', 'You have', 80), ('uid', 'ID', 85),
+                                     ('played', 'Last played', 125), ('backup', 'Backup', 170))),
+                          ('all', (('figure', 'Skylander', 280), ('game', 'Game', 140), ('element', 'Element', 90),
+                                   ('owned', 'You have', 90))),
+                          ('teams', (('team', 'Team', 160), ('size', 'Size', 60), ('figures', 'Figures', 420)))):
             t = ttk.Treeview(table, columns=[c[0] for c in cols], show='headings', selectmode='browse')
             for c, title, width in cols:
                 t.heading(c, text=title, anchor='w', command=lambda tab=key, c=c: self.sort_by(tab, c))
@@ -3365,6 +3675,8 @@ class App:
             t.tag_configure('odd', background=self.ODD)
             t.tag_configure('loaded', foreground=self.FAINT)
             t.tag_configure('broken', foreground=self.BAD)
+            if key == 'yours':  # the figure ID stays searchable, but is not a column of its own
+                t['displaycolumns'] = [c[0] for c in cols if c[0] != 'uid']
             t.bind('<<TreeviewSelect>>', lambda e: self.picker_buttons())
             t.bind('<Double-1>', lambda e: self.pick(self.DEFAULT_PICK[self.tab.get()]))
             self.cell_tips(t)
@@ -3380,12 +3692,12 @@ class App:
         bar = ttk.Frame(p, padding=(22, 12))  # packed before the list, so the buttons always keep their room
         bar.pack(fill='x', side='bottom', before=body)
         tk.Frame(p, background=self.LINE, height=1).pack(fill='x', side='bottom', before=body)
-        ttk.Button(bar, text='Browse files…', command=lambda: (p.destroy(), self.ask_load())).pack(side='left')
+        ttk.Button(bar, text='Open a .sky file…', command=lambda: (p.destroy(), self.ask_load())).pack(side='left')
         self.actions = {'yours': ttk.Frame(bar), 'all': ttk.Frame(bar), 'teams': ttk.Frame(bar)}
-        self.pick_current = ttk.Button(self.actions['yours'], text='Load current', style='Accent.TButton',
+        self.pick_current = ttk.Button(self.actions['yours'], text='Put on portal', style='Accent.TButton',
                                        command=lambda: self.pick('current'))
         self.pick_current.pack(side='right')
-        self.pick_backup = ttk.Button(self.actions['yours'], text='Load backup', command=lambda: self.pick('backup'))
+        self.pick_backup = ttk.Button(self.actions['yours'], text='Put backup on portal', command=lambda: self.pick('backup'))
         self.pick_backup.pack(side='right', padx=(0, 8))
         self.pick_new = ttk.Button(self.actions['all'], text='Create new figure', style='Accent.TButton',
                                    command=lambda: self.pick('new'))
@@ -3394,14 +3706,14 @@ class App:
         for tab in ('yours', 'all'):
             self.fav_buttons[tab] = ttk.Button(self.actions[tab], text='★ Favourite', command=self.toggle_favourite)
             self.fav_buttons[tab].pack(side='right', padx=(0, 8))
-        self.pick_team = ttk.Button(self.actions['teams'], text='Load team', style='Accent.TButton',
+        self.pick_team = ttk.Button(self.actions['teams'], text='Put team on portal', style='Accent.TButton',
                                     command=lambda: self.pick('team'))
         self.pick_team.pack(side='right')
-        self.drop_team = ttk.Button(self.actions['teams'], text='Remove team', command=self.remove_team)
+        self.drop_team = ttk.Button(self.actions['teams'], text='Remove', command=self.remove_team)
         self.drop_team.pack(side='right', padx=(0, 8))
         self.edit_team_button = ttk.Button(self.actions['teams'], text='Edit…', command=self.edit_team)
         self.edit_team_button.pack(side='right', padx=(0, 8))
-        ttk.Button(self.actions['teams'], text='Save portal as team…', command=self.save_team).pack(side='right', padx=(0, 8))
+        ttk.Button(self.actions['teams'], text='Save the portal as a team…', command=self.save_team).pack(side='right', padx=(0, 8))
         p.bind('<Return>', lambda e: self.pick(self.DEFAULT_PICK[self.tab.get()]))
         p.bind('<Escape>', lambda e: p.destroy())
         self.switch_tab()
@@ -3426,7 +3738,8 @@ class App:
             w = min(max([head.measure(tree.heading(col, 'text'))] + [body.measure(str(r[k])) for r in rows]) + 24,
                     self.MAX_COLUMN)  # a long name no longer widens the window: cell_tips shows it whole
             tree.column(col, width=w, minwidth=min(w, 120))
-            total += w
+            shown = tree['displaycolumns']
+            total += w if tuple(shown) == ('#all',) or col in shown else 0
         window.update_idletasks()
         left, top, right, bottom = monitor_area(window.winfo_rootx() + window.winfo_width() // 2,
                                                 window.winfo_rooty() + window.winfo_height() // 2)
@@ -3548,7 +3861,7 @@ class App:
         if pictures:
             self.cards.yview_moveto(0)
             self.cards.after_idle(self.draw_cards)  # once the canvas has its width
-        self.tab_buttons['yours'].configure(text=f'Your Skylanders ({len(self.yours)})')
+        self.tab_buttons['yours'].configure(text=f'Yours ({len(self.yours)})')
         self.tab_buttons['all'].configure(text=f'All Skylanders ({len(DETAILS)})')
         if 'teams' in self.tab_buttons:
             self.tab_buttons['teams'].configure(text=f'Teams ({len(self.teams())})')
@@ -3559,7 +3872,7 @@ class App:
 
     def have_word(self, key, physical=None):
         """'✓ Physical' (read from your real portal), 'On PC' (a file only: created or imported), or '' for a figure
-        ('id:variant'). physical: for one figure in Your Skylanders, whether it has a backup."""
+        ('id:variant'). physical: for one figure in Yours, whether it has a backup."""
         if physical if physical is not None else key in self.physical:
             return '✓ Physical'
         return 'On PC' if physical is not None or key in self.owned else ''
@@ -3918,72 +4231,34 @@ class App:
         return {'claimed': 'Portal connected', 'looking': 'Looking for the portal'}.get(state, f'Portal {state}')
 
     def open_settings(self):
-        """The Settings page: write-back, portal speaker volume, the activity log, and the actions for all figures."""
+        """The Settings page: one column of cards (Saving, Emulators, Portal, All figures, Window), each row a name,
+        a short hint and its switch or button. Changes are saved as they are made. Scrolls when the screen is short."""
         import tkinter as tk
         from tkinter import ttk
         if getattr(self, 'settings_window', None) is not None and self.settings_window.winfo_exists():
             return self.settings_window.lift()
         d = self.settings_window = tk.Toplevel(self.root)
         d.title('Settings')
-        d.configure(background=self.CARD)
+        d.configure(background=self.BG)
         d.transient(self.root)
         d.resizable(False, False)
-        body = ttk.Frame(d, style='Card.TFrame', padding=(24, 20, 24, 8))
-        body.pack(fill='both', expand=True)
-        ttk.Label(body, text='Settings', style='Section.TLabel').pack(anchor='w')
-        columns = ttk.Frame(body, style='Card.TFrame')
-        columns.pack(fill='both', expand=True)
-        left, right = (ttk.Frame(columns, style='Card.TFrame') for _ in range(2))
-        left.pack(side='left', fill='y', anchor='n')
-        right.pack(side='left', fill='y', anchor='n', padx=(32, 0))
-        col = left  # Saving, Sound and Portal on the left; Emulators, Window and All figures on the right
-
-        def section(title):
-            tk.Frame(col, background=self.LINE, height=1).pack(fill='x', pady=(14, 10))
-            ttk.Label(col, text=title, style='Card.TLabel', font=('Segoe UI Semibold', 10)).pack(anchor='w', pady=(0, 6))
-
-        def line(help=None, pad=8):
-            """A row in the current column, ending in a ? with the explanation when there is one."""
-            r = ttk.Frame(col, style='Card.TFrame')
-            r.pack(fill='x', pady=(pad, 0))
-            if help:
-                r.help = self.help_icon(r, help)
-            return r
-
-        def done(r):  # the ? right after what the row explains
-            if hasattr(r, 'help'):
-                r.help.pack(side='left', padx=(6, 0))
-
-        def check(text, var, command, help=None, pad=8):
-            r = line(help, pad)
-            ttk.Checkbutton(r, text=text, variable=var, style='Card.TCheckbutton', command=command).pack(side='left')
-            done(r)
-
-        def label(text, help=None, pad=10):
-            r = line(help, pad)
-            ttk.Label(r, text=text, style='Card.TLabel').pack(side='left')
-            done(r)
-            return r
+        bar = self.footer(d, 'Changes are saved as you make them.')
+        body = self.scroll_body(d)
+        ttk.Label(body, text='Settings', style='PlainTitle.TLabel').pack(anchor='w')
+        switch = self.switch_button
         if self.mirror:
-            section('Saving')
-            check('Write saves to real figures', self.wb, self.toggle_write_back, pad=0,
-                  help='Game saves also go onto the figure on the real portal, not only into its copy on the PC. '
-                       'Every block is read back to check it.')
+            g = self.group(body, 'Saving')
+            switch(g.add('Write saves to real figures', 'Game progress goes onto the figure, not only into its copy '
+                                                        'on this PC. Every block is read back to check it.'),
+                   self.wb, self.toggle_write_back)
             restore_popup = tk.BooleanVar(value=self.settings().get('restore_popup', True))
-            check('Ask to put newer progress back on a figure', restore_popup,
-                  lambda: self.remember(restore_popup=restore_popup.get()),
-                  help='When you place a figure that is behind its saved copy (because you played with "Write saves '
-                       'to real figures" off), a pop-up offers to write that progress onto the figure. Off: only the '
-                       'log mentions it, and "Restore progress…" still has it.')
-
+            switch(g.add('Offer to put newer progress back on a figure',
+                         'When a placed figure is behind its copy on this PC, PortalSync asks to update it.'),
+                   restore_popup, lambda: self.remember(restore_popup=restore_popup.get()))
             daily = tk.BooleanVar(value=self.settings().get('daily_zip', True))
-            check('Daily backup zip', daily, lambda: self.remember(daily_zip=daily.get()),
-                  help='Once a day, at start, every figure file goes into a zip in the "daily backups" folder '
-                       'inside the figures folder. The last 7 are kept; older ones go to the Recycle Bin.')
-
-            r = label('Backups per figure', help='How many older copies of each figure are kept. The newest intact '
-                                                 'ones stay; older ones go to the Recycle Bin. The first copy '
-                                                 '("original") always stays as well.')
+            switch(g.add('Daily backup', 'Once a day, every figure file goes into a zip in the daily backups '
+                                         'folder. The last 7 are kept.'),
+                   daily, lambda: self.remember(daily_zip=daily.get()))
             kept = tk.StringVar(value=str(self.settings().get('backups', 1)))
 
             def set_kept(*_):
@@ -3992,233 +4267,236 @@ class App:
                     BACKUPS_KEPT = int(kept.get())
                     self.remember(backups=BACKUPS_KEPT)
             kept.trace_add('write', set_kept)
-            ttk.Spinbox(r, from_=1, to=10, textvariable=kept, width=4, state='readonly').pack(side='left', padx=(12, 0))
-
-            folder = tk.StringVar(value=self.settings().get('dumps') or DUMPS)
-            moving = lambda: os.path.normcase(os.path.normpath(folder.get() or DUMPS)) != os.path.normcase(DUMPS)
-            r = label('Figures folder', help=lambda: 'Where your figure files are kept. ' + (
-                'Your files move to the new folder the next time PortalSync starts.' if moving() else
-                'Pick another folder (for example on OneDrive) and they move there on the next start.'))
-
-            def set_folder(*_):
-                typed = folder.get().strip().strip('"')  # a relative path is in the app folder, not the CWD
-                path = os.path.normpath(os.path.join(HERE, typed)) if typed else ''
-                if not path or same_folder(path, DUMPS):
-                    self.remember(dumps=DUMPS, dumps_move_from=None)
-                else:
-                    self.remember(dumps=path, dumps_move_from=DUMPS)
+            ttk.Spinbox(g.add('Backups kept per figure', 'Older copies beyond this go to the Recycle Bin. The first '
+                                                         'copy ("original") always stays.'),
+                        from_=1, to=10, textvariable=kept, width=4, state='readonly').pack()
+            folder = self.settings().get('dumps') or DUMPS
+            r = g.add('Figures folder', folder)
 
             def pick_folder():
                 from tkinter import filedialog
                 path = filedialog.askdirectory(parent=d, title='Folder for your figure files', initialdir=DUMPS)
-                if path:
-                    folder.set(os.path.normpath(path))
-                    set_folder()
-            ttk.Button(r, text='Browse…', style='Small.TButton', command=pick_folder).pack(side='right', fill='y')
-            box = ttk.Entry(r, textvariable=folder, width=36)
-            box.pack(side='right', fill='x', expand=True, padx=(12, 8))
-            box.bind('<FocusOut>', set_folder)
-            box.bind('<Return>', set_folder)
+                if not path:
+                    return
+                path = os.path.normpath(path)
+                if same_folder(path, DUMPS):
+                    self.remember(dumps=DUMPS, dumps_move_from=None)
+                    r.hint.configure(text=DUMPS)
+                else:
+                    self.remember(dumps=path, dumps_move_from=DUMPS)
+                    r.hint.configure(text=path + '\nYour files move there the next time PortalSync starts.')
+            ttk.Button(r, text='Change…', command=pick_folder).pack()
+            if not same_folder(folder, DUMPS):
+                r.hint.configure(text=folder + '\nYour files move there the next time PortalSync starts.')
 
-            section('Sound')
-            r = label('Portal speaker volume', pad=0)
-            percent = ttk.Label(r, style='CardMuted.TLabel', width=5, anchor='e')
-            percent.pack(side='right')
-            scale = ttk.Scale(r, from_=0, to=100, variable=self.volume, length=200,
-                              command=lambda v: (self.set_volume(), percent.configure(text=f'{self.volume.get()} %')))
-            scale.pack(side='right', padx=(12, 6))
-            scale.bind('<ButtonRelease-1>', lambda e: self.remember(volume=self.volume.get()))
-            percent.configure(text=f'{self.volume.get()} %')
-            r = label('Trap portal sound on', help='Where Trap Team plays the sounds of trapped villains. The portal '
-                                                   'speaker needs a Traptanium Portal; without one the sound plays on the PC.')
+            g = self.group(body, 'Emulators')
+            self.emulator_rows(g, d)
+            full = tk.BooleanVar(value=self.settings().get('fullscreen', False))
+            switch(g.add('Start games fullscreen', 'RPCS3 then starts without its own window.'), full,
+                   lambda: self.remember(fullscreen=full.get()))
+
+            g = self.group(body, 'Portal')
+            lights = tk.BooleanVar(value=self.settings().get('lights', True))
+
+            def set_lights():
+                self.mirror.lights = lights.get()
+                self.remember(lights=lights.get())
+            switch(g.add('Lights', "The real portal's lights follow the game, as on a console."), lights, set_lights)
             sound = tk.StringVar(value=self.settings().get('sound', 'portal'))
 
             def set_sound():
                 if getattr(self.server, 'sound', None):
                     self.server.sound.mode = sound.get()
                 self.remember(sound=sound.get())
-            for value, text in (('off', 'Off'), ('pc', 'PC speakers'), ('portal', 'Portal speaker')):
-                ttk.Radiobutton(r, text=text, value=value, variable=sound, style='Segment.TRadiobutton',
-                                command=set_sound).pack(side='right')
+            self.segments(g.add('Trap sounds play on', 'The portal speaker needs a Traptanium Portal; without one '
+                                                       'the sound plays on the PC.'),
+                          sound, (('portal', 'Portal'), ('pc', 'PC'), ('off', 'Off')), set_sound)
+            r = g.add('Portal speaker volume')
+            percent = ttk.Label(r, style='CardMuted.TLabel', width=5, anchor='e')
+            percent.pack(side='right')
+            scale = ttk.Scale(r, from_=0, to=100, variable=self.volume, length=180,
+                              command=lambda v: (self.set_volume(), percent.configure(text=f'{self.volume.get()} %')))
+            scale.pack(side='right', padx=(0, 6))
+            scale.bind('<ButtonRelease-1>', lambda e: self.remember(volume=self.volume.get()))
+            percent.configure(text=f'{self.volume.get()} %')
+            r = g.add('Something not working?', 'Test portal shows the real slots, the lights and the speaker. '
+                                                'Check setup looks at usbip-win2, the driver and the emulators.')
+            ttk.Button(r, text='Check setup…', command=self.open_setup_check).pack(side='right', padx=(8, 0))
+            ttk.Button(r, text='Test portal…', command=self.open_portal_test).pack(side='right')
 
-            section('Portal')
-            lights = tk.BooleanVar(value=self.settings().get('lights', True))
+            g = self.group(body, 'All figures')
+            ttk.Button(g.add('Back up every figure into one zip'), text='Back up…', command=self.backup_all).pack()
+            ttk.Button(g.add('Put a backup back on a figure', 'For a figure on the real portal.'), text='Restore…',
+                       command=self.open_restore).pack()
 
-            def set_lights():
-                self.mirror.lights = lights.get()
-                self.remember(lights=lights.get())
-            check('Lights', lights, set_lights, pad=0, help="The real portal's lights follow the game, as on a console.")
-            r = line(help='Test portal: which real slots have a figure, and the lights and the speaker. Check setup: '
-                          'usbip-win2, the portal and its driver, the virtual portal and the emulators.')
-            ttk.Button(r, text='Test portal…', command=self.open_portal_test).pack(side='left')
-            ttk.Button(r, text='Check setup…', command=self.open_setup_check).pack(side='left', padx=(8, 0))
-            done(r)
+        g = self.group(body, 'Window')
+        theme = tk.StringVar(value={True: 'dark', 'system': 'system'}.get(self.settings().get('dark'), 'light'))
+        self.segments(g.add('Look', 'Used from the next start.'), theme,
+                      (('light', 'Light'), ('dark', 'Dark'), ('system', 'Like Windows')),
+                      lambda: self.remember(dark={'dark': True, 'system': 'system'}.get(theme.get(), False)))
+        switch(g.add('Show activity', 'The list of what happened, under the figures. Everything is also kept in '
+                                      'portalsync.log.'), self.show_log, self.toggle_log)
+        pictures = tk.BooleanVar(value=self.pictures)
 
-            col = right
-            section('Emulators')
-            self.emulator_rows(col, d)
-            full = tk.BooleanVar(value=self.settings().get('fullscreen', False))
-            check('Start games in fullscreen', full, lambda: self.remember(fullscreen=full.get()),
-                  help='Start game opens the game fullscreen. RPCS3 then starts without its own window.')
-
-        col = right
-        section('Window')
-        check('Show log', self.show_log, self.toggle_log, pad=0,
-              help='The activity list at the bottom of the main window. Everything stays in portalsync.log either way.')
-        dark = tk.BooleanVar(value=self.settings().get('dark', False))
-        check('Dark mode', dark, lambda: self.remember(dark=dark.get()), help='Used from the next start.')
+        def set_pictures():
+            self.pictures = pictures.get()
+            self.remember(pictures=self.pictures)
+            self.rows = None  # drawn again, with pictures or with element dots
+        switch(g.add('Show figure pictures', 'Off: each figure shows a dot in its element colour instead.'),
+               pictures, set_pictures)
         updates = tk.BooleanVar(value=self.settings().get('check_updates', True))
-        check('Check for a new version at start', updates, lambda: self.remember(check_updates=updates.get()),
-              help='Asks GitHub for the latest release. When there is a newer one, a link in the main window '
-                   'installs it and restarts PortalSync.')
-
-        if self.mirror:
-            section('All figures')
-            r = line(help='Back up: every figure file into one zip you choose. Restore: write a backup onto a figure '
-                          'on the real portal.', pad=0)
-            ttk.Button(r, text='Back up all figures…', command=self.backup_all).pack(side='left')
-            ttk.Button(r, text='Restore progress…', command=self.open_restore).pack(side='left', padx=(8, 0))
-            done(r)
-        bar = ttk.Frame(d, padding=(24, 14), style='Card.TFrame')
-        bar.pack(fill='x')
+        switch(g.add('Check for a new version at start', 'When there is a newer one, a link in the main window '
+                                                         'installs it.'),
+               updates, lambda: self.remember(check_updates=updates.get()))
 
         def close():
-            d.focus_set()  # a path being typed is saved by its box losing the focus
+            d.focus_set()
             d.update()
             d.destroy()
-        ttk.Button(bar, text='Close', style='Accent.TButton', command=close).pack(side='right')
+        ttk.Button(bar, text='Done', style='Accent.TButton', command=close).pack(side='right')
         d.bind('<Escape>', lambda e: close())
         d.protocol('WM_DELETE_WINDOW', close)
-        d.update_idletasks()
+        self.fit_scroll(d)
         x = self.root.winfo_rootx() + (self.root.winfo_width() - d.winfo_reqwidth()) // 2  # over the main window,
-        y = self.root.winfo_rooty() + 60
+        y = self.root.winfo_rooty() + 40
         d.geometry('+%d+%d' % place_on(x, y, d.winfo_reqwidth(), d.winfo_reqheight(), self.root))  # on its monitor
 
-    def help_icon(self, parent, text):
-        """A small ? that shows `text` (or text() when it is a function) after a moment's hover, or on a click."""
-        import tkinter as tk
-        c = tk.Canvas(parent, width=18, height=18, background=self.CARD, highlightthickness=0, cursor='question_arrow')
-        c.create_oval(2, 2, 16, 16, outline=self.FAINT)
-        c.create_text(9, 9, text='?', fill=self.MUTED, font=('Segoe UI Semibold', 8))
-        tip = {'win': None, 'job': None}
-
-        def show():
-            hide()
-            w = tip['win'] = tk.Toplevel(c, background=self.LINE)  # the 1 px border
-            w.overrideredirect(True)
-            w.attributes('-topmost', True)
-            tk.Label(w, text=text() if callable(text) else text, background=self.CARD, foreground=self.TEXT,
-                     font=('Segoe UI', 9), wraplength=320, justify='left', padx=10, pady=7).pack(padx=1, pady=1)
-            w.update_idletasks()
-            x = min(c.winfo_rootx() + 24, monitor_area(c.winfo_rootx(), c.winfo_rooty())[2] - w.winfo_reqwidth() - 8)
-            w.geometry(f'+{x}+{c.winfo_rooty() - 6}')
-
-        def hide(*_):
-            if tip['job']:
-                c.after_cancel(tip['job'])
-                tip['job'] = None
-            if tip['win'] is not None and tip['win'].winfo_exists():
-                tip['win'].destroy()
-            tip['win'] = None
-        c.bind('<Enter>', lambda e: tip.__setitem__('job', c.after(500, show)))
-        c.bind('<Leave>', hide)
-        c.bind('<Button-1>', lambda e: hide() if tip['win'] else show())
-        c.bind('<Destroy>', hide)
-        return c
-
-    def emulator_rows(self, parent, dialog):
-        """A path box and a Browse… button for Cemu, RPCS3 and Dolphin; a change is saved when the box is left."""
+    def scroll_body(self, d, padding=(24, 20, 24, 24)):
+        """The page of a window that scrolls when it is taller than the screen allows (Settings, Welcome).
+        fit_scroll(d) sizes it once it is filled."""
         import tkinter as tk
         from tkinter import ttk
+        canvas = tk.Canvas(d, background=self.BG, highlightthickness=0, borderwidth=0)
+        scroll = ttk.Scrollbar(d, orient='vertical', command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side='left', fill='both', expand=True)
+        body = ttk.Frame(canvas, style='Plain.TFrame', padding=padding)
+        canvas.create_window(0, 0, window=body, anchor='nw')
+        d.bind('<MouseWheel>', lambda e: canvas.yview_scroll(-e.delta // 120, 'units')
+               if canvas.yview() != (0.0, 1.0) else None)
+        d.page = canvas, scroll, body
+        return body
+
+    def fit_scroll(self, d):
+        canvas, scroll, body = d.page
+        d.update_idletasks()
+        w, h = body.winfo_reqwidth(), body.winfo_reqheight()
+        room = d.winfo_screenheight() - 200
+        canvas.configure(width=w, height=min(h, room), scrollregion=(0, 0, w, h))
+        if h > room:
+            scroll.pack(side='right', fill='y', before=canvas)
+        d.update_idletasks()
+
+    def footer(self, d, note='', before=None):
+        """A window's bottom bar, above a 1 px line: a muted note on the left; the buttons go on the right.
+        Make it before the window's body (or pass before=body), so the buttons keep their room."""
+        import tkinter as tk
+        from tkinter import ttk
+        bar = ttk.Frame(d, style='Card.TFrame', padding=(24, 12))
+        bar.pack(side='bottom', fill='x', **({'before': before} if before else {}))
+        tk.Frame(d, background=self.LINE, height=1).pack(side='bottom', fill='x', **({'before': before} if before else {}))
+        if note:
+            ttk.Label(bar, text=note, style='CardMuted.TLabel').pack(side='left')
+        return bar
+
+    def group(self, parent, title=None, width=380):
+        """A titled card of rows split by 1 px lines. Its add(name, hint) makes a row and returns the row's right
+        side, for its switch or buttons; the hint label is that frame's .hint."""
+        import tkinter as tk
+        from tkinter import ttk
+        if title:
+            ttk.Label(parent, text=title, style='PlainStrong.TLabel').pack(anchor='w', pady=(20, 6))
+        edge = tk.Frame(parent, background=self.LINE)
+        edge.pack(fill='x')
+        box = tk.Frame(edge, background=self.CARD)
+        box.pack(fill='both', expand=True, padx=1, pady=1)
+
+        def add(name, hint=None):
+            if box.winfo_children():
+                tk.Frame(box, background=self.LINE, height=1).pack(fill='x', padx=16)
+            r = ttk.Frame(box, style='Card.TFrame', padding=(16, 10))
+            r.pack(fill='x')
+            right = ttk.Frame(r, style='Card.TFrame')
+            right.pack(side='right', padx=(20, 0))
+            words = ttk.Frame(r, style='Card.TFrame')
+            words.pack(side='left', fill='x', expand=True)
+            ttk.Label(words, text=name, style='Card.TLabel').pack(anchor='w')
+            right.hint = ttk.Label(words, text=hint or '', style='Hint.TLabel', wraplength=width, justify='left')
+            if hint:
+                right.hint.pack(anchor='w', pady=(1, 0))
+            return right
+        box.add = add
+        return box
+
+    def switch_button(self, parent, var, command):
+        from tkinter import ttk
+        ttk.Checkbutton(parent, variable=var, style='Switch.TCheckbutton', command=command, takefocus=False).pack()
+
+    def segments(self, parent, var, choices, command=None):
+        """Joined buttons where one is chosen (a 'segmented control'), packed right to left in `parent`."""
+        from tkinter import ttk
+        for value, text in reversed(choices):
+            ttk.Radiobutton(parent, text=text, value=value, variable=var, style='Segment.TRadiobutton',
+                            command=command).pack(side='right')
+
+    def emulator_rows(self, group, dialog):
+        """A row in `group` per emulator: its program file (or that none was found) and Change… or Choose…."""
         emulators = self.emulators()
-        grid = ttk.Frame(parent, style='Card.TFrame')
-        grid.pack(fill='x')
+        from tkinter import ttk
 
-        def save(name, var):
-            path = var.get().strip().strip('"')
-            emulators.pop(name, None) if not path else emulators.__setitem__(name, os.path.normpath(path))
-            self.remember(emulators=emulators)
-
-        def browse(name, var):
+        def browse(name, row, button):
             from tkinter import filedialog
             exe = filedialog.askopenfilename(parent=dialog, title=f'Where is {name}?', filetypes=[('Programs', '*.exe')])
             if exe:
-                var.set(os.path.normpath(exe))
-                save(name, var)
-        for row, name in enumerate(EMULATOR_EXES):
-            var = tk.StringVar(value=emulators.get(name, ''))
-            ttk.Label(grid, text=name, style='Card.TLabel', width=8).grid(row=row, column=0, sticky='w', pady=3)
-            box = ttk.Entry(grid, textvariable=var, width=48)
-            box.grid(row=row, column=1, sticky='we', padx=(4, 8), pady=3)
-            box.bind('<FocusOut>', lambda e, n=name, v=var: save(n, v))
-            box.bind('<Return>', lambda e, n=name, v=var: save(n, v))
-            ttk.Button(grid, text='Browse…', style='Small.TButton',
-                       command=lambda n=name, v=var: browse(n, v)).grid(row=row, column=2, pady=3, sticky='ns')
-        grid.columnconfigure(1, weight=1)
+                emulators[name] = os.path.normpath(exe)
+                self.remember(emulators=emulators)
+                row.hint.configure(text=emulators[name])
+                button.configure(text='Change…')
+        for name in EMULATOR_EXES:
+            row = group.add(name, emulators.get(name) or 'Not found. Choose its program file to use it.')
+            button = ttk.Button(row, text='Change…' if emulators.get(name) else 'Choose…')
+            button.configure(command=lambda n=name, r=row, b=button: browse(n, r, b))
+            button.pack()
 
     def welcome(self):
-        """First start: the main choices in one window, before the main window is built (so dark mode applies
-        at once). Everything can be changed later in Settings."""
+        """First start: the setup checklist and the main choices in one window, before the main window is built
+        (so dark mode applies at once). Everything can be changed later in Settings."""
         import tkinter as tk
         from tkinter import ttk
         d = tk.Toplevel(self.root)
         d.title('Welcome to PortalSync')
-        d.configure(background=self.CARD)
+        d.configure(background=self.BG)
         d.resizable(False, False)
-        body = ttk.Frame(d, style='Card.TFrame', padding=(28, 22, 28, 8))
-        body.pack(fill='both')
-        ttk.Label(body, text='Welcome to PortalSync', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(body, text='A few choices to start with. You can change them later in Settings.',
-                  style='CardMuted.TLabel').pack(anchor='w', pady=(4, 0))
-
-        def row(label, help=None):
-            tk.Frame(body, background=self.LINE, height=1).pack(fill='x', pady=12)
-            r = ttk.Frame(body, style='Card.TFrame')
-            r.pack(fill='x')
-            ttk.Label(r, text=label, style='Card.TLabel', font=('Segoe UI Semibold', 10)).pack(side='left')
-            if help:
-                self.help_icon(r, help).pack(side='left', padx=(6, 0))
-            return r
-        theme = tk.StringVar(value='dark' if self.settings().get('dark') else 'light')
-        r = row('Look')
-        for value, text in (('dark', 'Dark'), ('light', 'Light')):
-            ttk.Radiobutton(r, text=text, value=value, variable=theme, style='Segment.TRadiobutton').pack(side='right')
-        wb = tk.BooleanVar(value=self.settings().get('write_back', True))
-        r = row('Write saves to real figures', 'Game saves also go onto the figure on the real portal, not only into '
-                                               'its copy on the PC. Every block is read back to check it.')
-        ttk.Checkbutton(r, variable=wb, style='Card.TCheckbutton').pack(side='right')
-        sound = tk.StringVar(value=self.settings().get('sound', 'portal'))
-        r = row('Trap portal sound on', 'Where Trap Team plays the sounds of trapped villains. The portal speaker '
-                                        'needs a Traptanium Portal; without one the sound plays on the PC.')
-        for value, text in (('off', 'Off'), ('pc', 'PC speakers'), ('portal', 'Portal speaker')):
-            ttk.Radiobutton(r, text=text, value=value, variable=sound, style='Segment.TRadiobutton').pack(side='right')
-        lights = tk.BooleanVar(value=self.settings().get('lights', True))
-        r = row('Lights', "The real portal's lights follow the game, as on a console.")
-        ttk.Checkbutton(r, variable=lights, style='Card.TCheckbutton').pack(side='right')
-        updates = tk.BooleanVar(value=self.settings().get('check_updates', True))
-        r = row('Check for a new version at start', 'Asks GitHub for the latest release. When there is a newer one, '
-                                                    'a link in the main window installs it.')
-        ttk.Checkbutton(r, variable=updates, style='Card.TCheckbutton').pack(side='right')
-        row('Emulators', 'Used by Start game. Found by themselves where possible; type another path or pick '
-                         'the exe with Browse.')
-        self.emulator_rows(body, d)
-        row('Setup', 'What PortalSync needs: usbip-win2, the portal with the libusbK driver (Zadig), the virtual '
-                     'portal and an emulator. A red ✗ says what to do; Settings → Check setup checks again.')
+        bar = self.footer(d, 'You can change all of these later in Settings.')
+        body = self.scroll_body(d, padding=(28, 22, 28, 24))
+        ttk.Label(body, text='Welcome to PortalSync', style='PlainTitle.TLabel').pack(anchor='w')
+        ttk.Label(body, text='Your real Portal of Power, inside the emulator. Check the setup, pick a few options, '
+                             'and start.', style='PlainMuted.TLabel', wraplength=440).pack(anchor='w', pady=(4, 0))
+        ttk.Label(body, text='Setup', style='PlainStrong.TLabel').pack(anchor='w', pady=(20, 6))
         colours = {k: getattr(self, k) for k in self.LIGHT}
-        setup_rows(body, setup_checks(self.mirror is not None, self.emulators()), colours).pack(anchor='w', pady=(8, 0))
+        setup_rows(body, setup_checks(self.mirror is not None, self.emulators()), colours, width=380).pack(fill='x')
+        g = self.group(body, 'Choices', width=300)
+        wb = tk.BooleanVar(value=self.settings().get('write_back', True))
+        self.switch_button(g.add('Write saves to real figures', 'Game progress goes onto the figure, not only into '
+                                                                'its copy on this PC.'), wb, None)
+        lights = tk.BooleanVar(value=self.settings().get('lights', True))
+        self.switch_button(g.add('Portal lights', 'The real portal glows like it does on a console.'), lights, None)
+        sound = tk.StringVar(value=self.settings().get('sound', 'portal'))
+        self.segments(g.add('Portal sound', 'Where Trap Team plays its trap sounds.'), sound,
+                      (('portal', 'Portal'), ('pc', 'PC'), ('off', 'Off')))
+        theme = tk.StringVar(value='dark' if self.settings().get('dark') else 'light')
+        self.segments(g.add('Look'), theme, (('light', 'Light'), ('dark', 'Dark')))
+        updates = tk.BooleanVar(value=self.settings().get('check_updates', True))
+        self.switch_button(g.add('Check for a new version at start'), updates, None)
 
         def done():
-            d.focus_set()  # an emulator path being typed is saved by its box losing the focus
-            d.update()
             self.remember(dark=theme.get() == 'dark', write_back=wb.get(), sound=sound.get(), lights=lights.get(),
                           check_updates=updates.get(), setup_done=True)
             d.destroy()
-        bar = ttk.Frame(d, padding=(28, 16), style='Card.TFrame')
-        bar.pack(fill='x')
         ttk.Button(bar, text='Start', style='Accent.TButton', command=done).pack(side='right')
         d.protocol('WM_DELETE_WINDOW', done)
         d.bind('<Return>', lambda e: done())
-        d.update_idletasks()
+        self.fit_scroll(d)
         d.geometry(f'+{(d.winfo_screenwidth() - d.winfo_reqwidth()) // 2}+{(d.winfo_screenheight() - d.winfo_reqheight()) // 3}')
         d.focus_force()
         self.root.wait_window(d)
@@ -4233,7 +4511,7 @@ class App:
 
     def selected_slot(self):
         """(virtual slot, image) of the figure selected in the slot table, or None."""
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         with self.server.cv:
             s = self.portal.slots[n] if n is not None else None
             return (n, bytes(s.data)) if s is not None and s.path and s.occupied() else None
@@ -4284,75 +4562,88 @@ class App:
         d.title('Compare figures')
         d.configure(background=self.CARD)
         d.transient(self.root)
-        body = ttk.Frame(d, style='Card.TFrame', padding=(20, 16))
+        name = figure_name(mine)
+        body = ttk.Frame(d, style='Card.TFrame', padding=(22, 18, 22, 12))
         body.pack(fill='both', expand=True)
-        ttk.Label(body, text=f'{figure_name(mine)} ({uid}) compared with', style='Section.TLabel').pack(anchor='w')
+        ttk.Label(body, text=f'Compare {name} with', style='Section.TLabel').pack(anchor='w')
         choice = tk.StringVar(value=others[0][0])
-        ttk.Combobox(body, textvariable=choice, values=[x[0] for x in others], state='readonly', width=64).pack(anchor='w', pady=(6, 10))
-        table = ttk.Treeview(body, columns=('this', 'other'), show='tree headings', height=22)
-        for col, text, width in (('#0', 'Field', 220), ('this', 'This figure', 260), ('other', 'Other', 260)):
-            table.heading(col, text=text)
+        ttk.Combobox(body, textvariable=choice, values=[x[0] for x in others], state='readonly', width=64
+                     ).pack(anchor='w', pady=(8, 0))
+        line = ttk.Frame(body, style='Card.TFrame')
+        line.pack(fill='x', pady=(10, 8))
+        summary = ttk.Label(line, style='CardMuted.TLabel')
+        summary.pack(side='left')
+        only = tk.StringVar(value='diff')
+        self.segments(line, only, (('diff', 'Only differences'), ('all', 'Everything')), lambda: fill())
+        table = ttk.Treeview(body, columns=('this', 'other'), show='tree headings', height=16)
+        for col, text, width in (('#0', 'Field', 200), ('this', f'{name} now', 270), ('other', 'Other', 270)):
+            table.heading(col, text=text, anchor='w')
             table.column(col, width=width)
         table.tag_configure('diff', background=self.CHANGED)
+        table.tag_configure('same', foreground=self.MUTED)
         table.pack(fill='both', expand=True)
-
-        def shown(key, value):
-            if key == 'upgrades' and isinstance(value, int):
-                return ', '.join(UPGRADES[i] for i in range(14) if value >> i & 1) or 'none'
-            if key == 'villains':
-                return ', '.join(VILLAINS.get(v, str(v)) + (' (evolved)' if e else '') for v, e in value) or 'none'
-            if isinstance(value, dict):
-                return ', '.join(f'{k}: {v}' for k, v in value.items())
-            if isinstance(value, list):
-                return ', '.join(map(str, value))
-            return FIGURE_KINDS[value] if key == 'kind' else 'yes' if value is True else 'no' if value is False else str(value)
+        self.cell_tips(table)
+        bar = self.footer(d, '↑ marks the copy with more progress.', before=body)
+        ttk.Button(bar, text='Close', style='Accent.TButton', command=d.destroy).pack(side='right')
+        d.bind('<Escape>', lambda e: d.destroy())
 
         def fill(*_):
             table.delete(*table.get_children())
-            other = dict(others)[choice.get()]
+            label = choice.get()
+            other = dict(others)[label]
+            table.heading('other', text=label if len(label) < 40 else label[:38] + '…')
             a, b = figure_fields(mine), figure_fields(other)
             for key in [k for k in a if k in b] + [k for k in b if k not in a]:
                 if key in ('id', 'variant', 'wowpow_ok', 'blank', 'old_damaged'):
                     continue
-                va, vb = (shown(key, x.get(key, '')) for x in (a, b))
-                table.insert('', 'end', text=key.rstrip('_').replace('_', ' ').capitalize() + (' (unverified)' if key.endswith('_') else ''),
-                             values=(va, vb), tags=('diff',) if va != vb else ())
+                va, vb = (field_text(key, x.get(key, '')) if key in x else '—' for x in (a, b))
+                if va == vb and only.get() == 'diff':
+                    continue
+                up = field_arrow(key, a.get(key), b.get(key))
+                text = FIELD_LABELS.get(key) or key.rstrip('_').replace('_', ' ').capitalize()
+                table.insert('', 'end', text=text + (' (unverified)' if key.endswith('_') else ''),
+                             values=(va + (' ↑' if up == '↑' else ''), vb + (' ↑' if up == '↓' else '')),
+                             tags=('diff',) if va != vb and only.get() == 'all' else ('same',) if va == vb else ())
             n = len(changed_blocks(crypt(mine), crypt(other)) if mine[:32] == other[:32] else changed_blocks(mine, other))
-            table.insert('', 0, text='Data blocks that differ', values=(n, ''), tags=('diff',) if n else ())
+            same = 'Same figure' if a.get('uid') == b.get('uid') else 'Another figure'
+            summary.configure(text=f'{n} of 64 data blocks differ. {same}, ID {b.get("uid")}.' if n else
+                              f'The data is the same. {same}, ID {b.get("uid")}.')
+            if not table.get_children():
+                table.insert('', 'end', text='No differences', values=('', ''), tags=('same',))
         choice.trace_add('write', fill)
         fill()
 
-    def figure_menu(self, event):
-        """Right-click on the slot table: what can be done with that figure."""
-        row = self.tree.identify_row(event.y)
-        if not row:
-            return
-        self.tree.selection_set(row)
+    def figure_menu(self, event, n):
+        """Right-click on a figure in the slot list: everything that can be done with it."""
+        self.select_slot(n)
+        self.popup(event.x_root, event.y_root, self.figure_items(n))
+
+    def figure_items(self, n, short=False):
+        """The menu of the figure in virtual slot n (popup items). short: without what the row's own buttons do."""
         with self.server.cv:
-            real = any(v == int(row) and self.portal.slots[v].path == path
+            real = any(v == n and self.portal.slots[v].path == path
                        for v, path, u in (self.mirror.slots.values() if self.mirror else ()))
-            unsaved = self.portal.slots[int(row)].unsaved is not None
-        items = [('Edit figure…', self.edit_figure, True),
-                 ('Compare with…', self.compare_figure, True),
-                 ('Clone as a new figure', self.clone_figure, True),
-                 None,
-                 ('Unload', self.unload_selected, True),
-                 ('Replace with…', lambda: self.open_picker(replace=int(row)), not real),
-                 ('Progress history…', self.show_history, True),
-                 ('Backups…', self.show_backups, True)]
+            unsaved = self.portal.slots[n].unsaved is not None
+        items = [] if short else [('Edit figure…', self.edit_figure, True)]
+        items += [('Compare with…', self.compare_figure, True),
+                  ('Progress history…', self.show_history, True),
+                  ('Clone as a new figure', self.clone_figure, True),
+                  ('Replace with…', lambda: self.open_picker(replace=n), not real)]
+        if not short:
+            items += [None, ('Unload', self.unload_selected, True), ('Backups…', self.show_backups, True)]
         if unsaved:  # its own file can't be written: the progress is only in memory
             items.append(('Save copy as…', self.save_copy, True))
         if self.mirror:  # these write to the figure, so it must be on the real portal
-            items += [None, ('Repair damaged save…', self.repair_selected, real),
-                      ('Reset to a new figure…', self.reset_selected, real),
-                      ('Restore progress…', self.restore_selected_figure, real)]
-        self.popup(event.x_root, event.y_root, items)
+            items += [None, ('Restore progress…', self.restore_selected_figure, real),
+                      ('Repair damaged save…', self.repair_selected, real),
+                      ('Reset to a new figure…', self.reset_selected, real)]
+        return items
 
     def save_copy(self):
         """The selected figure's progress from memory to a file the user picks. Its own file is still behind, so
         it stays unsaved and retry_saves keeps trying."""
         from tkinter import filedialog, messagebox
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         with self.server.cv:
             s = self.portal.slots[n] if n is not None else None
             if s is None or not s.path:
@@ -4372,7 +4663,7 @@ class App:
         """Level and gold of the selected figure over time (progress_history), as a list and a small chart."""
         import tkinter as tk
         from tkinter import ttk
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         if n is None:
             return
         with self.server.cv:
@@ -4384,8 +4675,12 @@ class App:
         d.transient(self.root)
         body = ttk.Frame(d, style='Card.TFrame', padding=(22, 18))
         body.pack(fill='both', expand=True)
-        ttk.Label(body, text=name, style='Figure.TLabel').pack(anchor='w')
-        ttk.Label(body, text=f'Figure ID {uid}', style='CardMuted.TLabel').pack(anchor='w')
+        ttk.Label(body, text=f'Progress of {name}', style='Section.TLabel').pack(anchor='w')
+        levels = [r[1] for r in rows if r[1]]
+        ttk.Label(body, style='CardMuted.TLabel', text=(
+            f'Level {levels[0]} to {levels[-1]} since {rows[0][0][:10]}' if len(levels) > 1 and levels[0] != levels[-1]
+            else f'Kept since {rows[0][0][:10]}' if rows else '') + f'{"  ·  " if rows else ""}figure ID {uid}'
+                  ).pack(anchor='w', pady=(2, 0))
         if not rows:
             ttk.Label(body, style='CardMuted.TLabel', wraplength=360, justify='left', text=(
                 'No progress kept yet. From now on PortalSync notes the level and gold each time they change.'
@@ -4408,7 +4703,7 @@ class App:
             for x, y in zip(xs, ys):
                 chart.create_oval(x - 3, y - 3, x + 3, y + 3, fill=self.ACCENT, outline=self.ACCENT)
             t = ttk.Treeview(body, columns=('when', 'level', 'gold'), show='headings', height=min(10, len(rows)))
-            for c, title in (('when', 'DATE'), ('level', 'LEVEL'), ('gold', 'GOLD')):
+            for c, title in (('when', 'Date'), ('level', 'Level'), ('gold', 'Gold')):
                 t.heading(c, text=title, anchor='w')
                 t.column(c, width=150 if c == 'when' else 90, anchor='w')
             t.tag_configure('odd', background=self.ODD)
@@ -4418,7 +4713,7 @@ class App:
             t.pack(fill='both', expand=True, pady=(10, 0))
         bar = ttk.Frame(d, padding=(22, 0, 22, 16), style='Card.TFrame')
         bar.pack(fill='x')
-        ttk.Button(bar, text='Close', style='Accent.TButton', command=d.destroy).pack(side='right')
+        ttk.Button(bar, text='Done', style='Accent.TButton', command=d.destroy).pack(side='right')
         d.bind('<Escape>', lambda e: d.destroy())
 
     def show_backups(self):
@@ -4426,7 +4721,7 @@ class App:
         the figure. "Put on figure" writes one onto the real figure (like Restore), saying which way it goes."""
         import tkinter as tk
         from tkinter import messagebox, ttk
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         if n is None:
             return
         with self.server.cv:
@@ -4445,21 +4740,22 @@ class App:
             kind = os.path.basename(path)[:-4].split(') - ', 1)[1]
             kind = re.sub(r'(\d\d)\.(\d\d)\.\d\d(-\d+)?$', r'\1:\2', kind)
             rows.append((path, data, info, (kind, info.level or '', '' if info.gold is None else f'{info.gold:,}',
-                                            info.nickname, 'damaged save: can\'t be used' if info.damaged else
-                                            compare_progress(info, now_info, data == now))))
+                                            info.nickname or 'none', 'damaged save: can\'t be used' if info.damaged else
+                                            ' '.join(filter(None, (progress_arrow(info, now_info, data == now),
+                                                                   compare_progress(info, now_info, data == now)))))))
         d = tk.Toplevel(self.root)
         d.title(f'Backups of {name}')
         d.configure(background=self.CARD)
         d.transient(self.root)
         body = ttk.Frame(d, style='Card.TFrame', padding=(22, 18))
         body.pack(fill='both', expand=True)
-        ttk.Label(body, text=name, style='Figure.TLabel').pack(anchor='w')
-        ttk.Label(body, style='CardMuted.TLabel', text=f'Figure ID {uid}  ·  the figure now: {stats(now_info)[3:] or "—"}'
-                  ).pack(anchor='w')
+        ttk.Label(body, text=f'Backups of {name}', style='Section.TLabel').pack(anchor='w')
+        ttk.Label(body, style='CardMuted.TLabel', text=f'The figure now: {stats(now_info)[3:] or "—"}  ·  figure ID {uid}'
+                  ).pack(anchor='w', pady=(2, 0))
         t = ttk.Treeview(body, columns=('kind', 'level', 'gold', 'nick', 'vs'), show='headings', selectmode='browse',
                          height=max(3, min(10, len(rows))))
-        for c, title in (('kind', 'BACKUP'), ('level', 'LEVEL'), ('gold', 'GOLD'), ('nick', 'NICKNAME'),
-                         ('vs', 'COMPARED WITH THE FIGURE')):
+        for c, title in (('kind', 'Backup'), ('level', 'Level'), ('gold', 'Gold'), ('nick', 'Nickname'),
+                         ('vs', 'Progress')):
             t.heading(c, text=title, anchor='w')
         t.tag_configure('odd', background=self.ODD)
         t.tag_configure('broken', foreground=self.BAD)
@@ -4470,8 +4766,8 @@ class App:
         self.cell_tips(t)
         note = ttk.Label(body, style='CardMuted.TLabel', wraplength=520, justify='left', text=(
             'No backups yet. A figure gets one when it is first read from the real portal.' if not rows else
-            'Putting a backup on the figure replaces what the figure holds; that becomes a backup itself, so it can be '
-            'undone.' if real else 'Put the figure on the real portal to put one of these backups on it.'))
+            '↑ more progress than the figure, ↓ less. Putting a backup on the figure keeps what the figure holds now as '
+            'a new backup, so you can undo it.' if real else 'Put the figure on the real portal to put one of these backups on it.'))
         note.pack(anchor='w', pady=(10, 0))
         bar = ttk.Frame(d, padding=(22, 0, 22, 16), style='Card.TFrame')
         bar.pack(fill='x')
@@ -4492,9 +4788,10 @@ class App:
                 return messagebox.showerror('Not written', str(e), parent=d)
             d.destroy()
             self.say(f'Writing {os.path.basename(path)} to figure {uid}…')
-        button = ttk.Button(bar, text='Put on figure', style='Accent.TButton', command=put)
+        button = ttk.Button(bar, text='Put on figure…', style='Accent.TButton', command=put)
         button.pack(side='right')
         ttk.Button(bar, text='Close', command=d.destroy).pack(side='right', padx=(0, 8))
+        ttk.Button(bar, text='Compare…', command=lambda: (d.destroy(), self.compare_figure())).pack(side='left')
 
         def chosen(*_):
             sel = t.selection()
@@ -4517,11 +4814,12 @@ class App:
         d.configure(background=self.CARD)
         d.transient(self.root)
         d.resizable(False, False)
-        body = ttk.Frame(d, style='Card.TFrame', padding=(24, 20, 24, 8))
+        bar = self.footer(d)
+        body = ttk.Frame(d, style='Card.TFrame', padding=(24, 20, 24, 20))
         body.pack(fill='both')
         ttk.Label(body, text='Check setup', style='Section.TLabel').pack(anchor='w', pady=(0, 12))
-        holder = ttk.Frame(body, style='Card.TFrame')
-        holder.pack(anchor='w')
+        holder = ttk.Frame(body, style='Card.TFrame', width=400)
+        holder.pack(fill='x')
 
         def check():
             for w in holder.winfo_children():
@@ -4530,11 +4828,9 @@ class App:
             d.update()
             checks = setup_checks(self.mirror is not None, self.emulators())
             holder.winfo_children()[0].destroy()
-            setup_rows(holder, checks, {k: getattr(self, k) for k in self.LIGHT}).pack()
-        bar = ttk.Frame(d, padding=(24, 12, 24, 18), style='Card.TFrame')
-        bar.pack(fill='x')
-        ttk.Button(bar, text='Close', style='Accent.TButton', command=d.destroy).pack(side='right')
-        ttk.Button(bar, text='Check again', command=check).pack(side='right', padx=(0, 8))
+            setup_rows(holder, checks, {k: getattr(self, k) for k in self.LIGHT}).pack(fill='x')
+        ttk.Button(bar, text='Check again', style='Accent.TButton', command=check).pack(side='right')
+        ttk.Button(bar, text='Close', command=d.destroy).pack(side='right', padx=(0, 8))
         ttk.Button(bar, text='Getting started guide', command=lambda: webbrowser.open(GUIDE)).pack(side='left')
         d.bind('<Escape>', lambda e: d.destroy())
         d.after(50, check)
@@ -4550,33 +4846,57 @@ class App:
         d.configure(background=self.CARD)
         d.transient(self.root)
         d.resizable(False, False)
+        bar = self.footer(d, 'Place or lift a figure to see it here.')
         body = ttk.Frame(d, style='Card.TFrame', padding=(24, 20))
         body.pack(fill='both')
         ttk.Label(body, text='Test portal', style='Section.TLabel').pack(anchor='w')
-        state = ttk.Label(body, style='Card.TLabel', wraplength=420, justify='left')
-        state.pack(anchor='w', pady=(10, 12))
+        line = ttk.Frame(body, style='Card.TFrame')
+        line.pack(anchor='w', pady=(6, 14))
+        dot = tk.Canvas(line, width=12, height=12, background=self.CARD, highlightthickness=0)
+        dot.create_rectangle(1, 1, 11, 11, outline='', tags='dot')
+        dot.pack(side='left', padx=(0, 8))
+        state = ttk.Label(line, style='Card.TLabel', wraplength=420, justify='left')
+        state.pack(side='left')
+        ttk.Label(body, text='What the real portal sees', style='Strong.TLabel').pack(anchor='w', pady=(0, 6))
         grid = ttk.Frame(body, style='Card.TFrame')
         grid.pack(anchor='w')
-        cells = []
+        blank = tk.PhotoImage(master=d, width=1, height=1)  # so a cell's size is in pixels, with or without a picture
+        cells, d.images = [], {}
         for k in range(8):  # the game uses up to 8 real slots (Swappers and traps take one each)
-            c = tk.Label(grid, width=13, height=3, font=('Segoe UI', 8), background=self.BUTTON, foreground=self.MUTED,
-                         highlightthickness=1, highlightbackground=self.LINE, wraplength=76)
-            c.grid(row=k // 4, column=k % 4, padx=3, pady=3)
+            c = tk.Label(grid, image=blank, compound='top', width=112, height=84, font=('Segoe UI', 9),
+                         wraplength=104, highlightthickness=1, highlightbackground=self.LINE, borderwidth=0)
+            c.grid(row=k // 4, column=k % 4, padx=(0, 6), pady=(0, 6))
             cells.append(c)
+
+        def picture(data):
+            img = self.badge(data, 40)
+            if img is None:  # no picture: a dot in the element's colour
+                colour = ELEMENT_COLOURS.get(element_of(data), NO_ELEMENT)
+                if colour not in d.images:  # a filled circle; the pixels left unset stay see-through
+                    img = d.images[colour] = tk.PhotoImage(master=d, width=14, height=14)
+                    for y in range(14):
+                        xs = [x for x in range(14) if (x - 6.5) ** 2 + (y - 6.5) ** 2 <= 42]
+                        if xs:
+                            img.put(colour, to=(xs[0], y, xs[-1] + 1, y + 1))
+                img = d.images[colour]
+            return img
 
         def update():
             if not d.winfo_exists():
                 return
             with self.server.cv:
-                slots = {i: uid for i, (v, path, uid) in m.slots.items()}
+                slots = {i: bytes(self.portal.slots[v].data) for i, (v, path, uid) in m.slots.items()}
                 failed, present = set(m.failed), set(m.present)
-                names = {i: figure_name(self.portal.slots[v].data) for i, (v, path, uid) in m.slots.items()}
             state.configure(text=self.short_state(m.state) + ('. Traptanium Portal: it has a speaker.' if m.speaker else '.'))
+            dot.itemconfigure('dot', fill=self.GOOD if m.real else self.FAINT)
             for k, c in enumerate(cells):
-                text, bg = (f'{k + 1}\n{names[k]}', self.SELECTED) if k in slots else \
-                           (f'{k + 1}\nnot read', self.BAD) if k in failed else \
-                           (f'{k + 1}\nreading…', self.HOVER) if k in present else (f'{k + 1}\nempty', self.BUTTON)
-                c.configure(text=text, background=bg, foreground='white' if bg == self.BAD else self.TEXT)
+                if k in slots:
+                    c.configure(text=figure_name(slots[k]), image=picture(slots[k]), background=self.CARD,
+                                foreground=self.TEXT, highlightbackground=self.EDGE)
+                else:
+                    text, bg, fg = ('Not read', self.BAD_SOFT, self.BAD) if k in failed else \
+                                   ('Reading…', self.HOVER, self.MUTED) if k in present else ('Empty', self.BG, self.FAINT)
+                    c.configure(text=text, image=blank, background=bg, foreground=fg, highlightbackground=self.LINE)
             d.after(300, update)
         update()
 
@@ -4596,17 +4916,21 @@ class App:
             pcm = array.array('h', samples).tobytes()
             threading.Thread(target=lambda: [sound.feed(pcm[k:k + 64]) for k in range(0, len(pcm), 64)],
                              daemon=True).start()
-        ttk.Label(body, text='Lights', style='Card.TLabel', font=('Segoe UI Semibold', 10)).pack(anchor='w', pady=(16, 6))
         row = ttk.Frame(body, style='Card.TFrame')
-        row.pack(anchor='w')
-        for text, rgb in (('Red', (255, 0, 0)), ('Green', (0, 255, 0)), ('Blue', (0, 0, 255)), ('White', (255, 255, 255)),
-                          ('Off', (0, 0, 0))):
-            ttk.Button(row, text=text, command=lambda c=rgb: light(*c)).pack(side='left', padx=(0, 6))
-        ttk.Label(body, text='Sound', style='Card.TLabel', font=('Segoe UI Semibold', 10)).pack(anchor='w', pady=(16, 6))
-        ttk.Button(body, text='Play a test tone', command=tone).pack(anchor='w')
-        bar = ttk.Frame(d, padding=(24, 0, 24, 18), style='Card.TFrame')
-        bar.pack(fill='x')
-        ttk.Button(bar, text='Close', style='Accent.TButton', command=d.destroy).pack(side='right')
+        row.pack(fill='x', pady=(12, 0))
+        ttk.Label(row, text='Lights', style='Strong.TLabel', width=9).pack(side='left')
+        for name, rgb in (('Red', (255, 0, 0)), ('Green', (0, 255, 0)), ('Blue', (0, 0, 255)), ('White', (255, 255, 255))):
+            swatch = tk.Label(row, image=blank, width=26, height=26, background='#%02x%02x%02x' % rgb, cursor='hand2',
+                              highlightthickness=1, highlightbackground=self.EDGE, borderwidth=0)
+            swatch.pack(side='left', padx=(0, 8))
+            swatch.bind('<Button-1>', lambda e, c=rgb: light(*c))
+            self.tip(swatch, name)
+        ttk.Button(row, text='Off', command=lambda: light(0, 0, 0)).pack(side='left')
+        row = ttk.Frame(body, style='Card.TFrame')
+        row.pack(fill='x', pady=(12, 0))
+        ttk.Label(row, text='Speaker', style='Strong.TLabel', width=9).pack(side='left')
+        ttk.Button(row, text='Play a test tone', command=tone).pack(side='left')
+        ttk.Button(bar, text='Done', style='Accent.TButton', command=d.destroy).pack(side='right')
         d.bind('<Escape>', lambda e: d.destroy())
 
     def update_now(self):
@@ -4657,7 +4981,7 @@ class App:
     def selected_real(self, what):
         """(uid, data, name) of the figure selected in the slot table if it is on the real portal, else None."""
         from tkinter import messagebox
-        n = next(iter(map(int, self.tree.selection())), None)
+        n = self.picked
         with self.server.cv:
             uid = next((u for i, (v, path, u) in self.mirror.slots.items()
                         if v == n and self.portal.slots[v].path == path), None)
@@ -4779,10 +5103,11 @@ class App:
         body.pack(fill='both', expand=True)
         ttk.Label(body, text='Start a game', style='Section.TLabel').pack(anchor='w')
         tree = ttk.Treeview(body, columns=('game', 'emulator', 'path'), show='headings', height=7, selectmode='browse')
-        for c, title in (('game', 'GAME'), ('emulator', 'EMULATOR'), ('path', 'FILE')):
+        for c, title in (('game', 'Game'), ('emulator', 'Emulator'), ('path', 'File')):
             tree.heading(c, text=title, anchor='w')
         tree.pack(fill='both', expand=True, pady=(10, 0))
         none = ttk.Label(body, style='CardMuted.TLabel', text='No Skylanders games found. Check your emulators in Settings.')
+        tree.tag_configure('odd', background=self.ODD)
 
         def fill():
             tree.delete(*tree.get_children())
@@ -4808,8 +5133,7 @@ class App:
                 start_game(emulators[emulator], emulator, path, self.settings().get('fullscreen', False))
             except (OSError, KeyError) as e:
                 self.say(f'Could not start {emulator}: {e}')
-        bar = ttk.Frame(d, padding=(22, 0, 22, 16), style='Card.TFrame')
-        bar.pack(fill='x', side='bottom', before=body)  # laid out first: the buttons always stay visible
+        bar = self.footer(d, "Found in your emulators' game lists.", before=body)
         ttk.Button(bar, text='Start', style='Accent.TButton', command=start).pack(side='right')
         ttk.Button(bar, text='Cancel', command=d.destroy).pack(side='right', padx=(0, 8))
         tree.bind('<Double-1>', lambda e: start())
@@ -4836,7 +5160,7 @@ class App:
         self.say(f'Writing an empty save (reset) to figure {uid}…')
 
     def unload_selected(self):
-        for n in map(int, self.tree.selection()):
+        for n in [self.picked] if self.picked is not None else []:
             with self.server.cv:
                 name = os.path.basename(self.portal.slots[n].path or '')
                 self.portal.remove(n)
@@ -4897,16 +5221,14 @@ class FigureEditor:
         body.pack(fill='both', expand=True)
         head = ttk.Frame(body, style='Card.TFrame')
         head.pack(fill='x')
-        path = os.path.join(THUMBS, f'{f["id"]}_{f["variant"]}.png')
-        path = path if os.path.exists(path) else next(iter(sorted(glob.glob(os.path.join(glob.escape(THUMBS), f'{f["id"]}_*.png')))), None)
-        try:
-            self.picture = tk.PhotoImage(master=self.w, file=path) if path else None
-            scale = -(-max(self.picture.width(), self.picture.height()) // 96) if self.picture else 1
-            self.picture = self.picture.subsample(scale) if scale > 1 else self.picture
-        except tk.TclError:
-            self.picture = None
+        # its picture in a ring of its element's colour (as in the slot list), or a dot in that colour
+        self.picture = app.badge(self.base, 72) if hasattr(app, 'badge') else None
         if self.picture:
             ttk.Label(head, image=self.picture, style='Card.TLabel').pack(side='left', padx=(0, 16))
+        else:
+            dot = tk.Canvas(head, width=20, height=20, background=app.CARD, highlightthickness=0)
+            dot.create_oval(3, 3, 17, 17, fill=ELEMENT_COLOURS.get(f['element'], NO_ELEMENT), outline='')
+            dot.pack(side='left', anchor='n', padx=(0, 10), pady=(8, 0))
         top = ttk.Frame(head, style='Card.TFrame')
         top.pack(side='left', fill='x', expand=True)
         ttk.Label(top, text=f.get('nickname') or f['name'], style='Figure.TLabel').pack(anchor='w')
@@ -4930,8 +5252,8 @@ class FigureEditor:
         for name in tabs:
             page = self.pages[name] = ttk.Frame(holder, style='Card.TFrame')
             getattr(self, 'page_' + name.lower())(page)
-            ttk.Radiobutton(bar, text=name, value=name, variable=self.tab, style='Tab.TRadiobutton',
-                            command=self.switch).pack(side='left')
+            ttk.Radiobutton(bar, text={'Stats': 'Progress'}.get(name, name), value=name, variable=self.tab,
+                            style='Tab.TRadiobutton', command=self.switch).pack(side='left')
         foot = ttk.Frame(body, style='Card.TFrame')
         foot.pack(fill='x', pady=(12, 0))
         self.note = ttk.Label(foot, style='CardMuted.TLabel')
