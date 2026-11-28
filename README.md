@@ -79,7 +79,7 @@ Your figures hold years of progress, so PortalSync is careful with them.
 - **Restore, repair, reset and the editor back up first.** What the figure held is kept as its backup, so each of them can be undone.
 - **You can try it without writing.** Untick **Write saves to real figures** in the welcome window or in Settings. PortalSync then never writes to a figure unless you tell it to, and your progress stays in the copies on your PC. Turn it on later to write that progress to the figures.
 
-PortalSync always keeps `original`, and besides it one backup per figure by default, the newest. Older ones go to the Recycle Bin. Set **Backups per figure** in Settings (up to 10) to keep more. Once a day PortalSync also puts all your figure files in a zip, and it keeps the last 7.
+PortalSync always keeps `original`, and besides it one backup per figure by default, the newest. Older ones go to the Recycle Bin. Set **Backups kept per figure** in Settings (up to 10) to keep more. Once a day PortalSync also puts all your figure files in a zip, and it keeps the last 7.
 
 ### If something doesn't work
 
@@ -129,7 +129,7 @@ Your real figures keep their progress.
 | ![Start a game](docs/games.png) | ![The welcome window](docs/welcome.png) |
 | **Start game**: your Skylanders games from Cemu, RPCS3, Dolphin and shadPS4. | **Welcome window** on the first start. |
 | ![Dark mode](docs/dark.png) | |
-| **Dark mode**, with the SAVE column: which saves are on the real figure. | ![Check setup](docs/setup_check.png) |
+| **Dark mode**, with the save icons: which saves are on the real figure. Point at one for details. | ![Check setup](docs/setup_check.png) |
 | | **Check setup**: everything PortalSync needs, with what to do when something is missing. |
 
 ## Features
@@ -155,15 +155,15 @@ Your real figures keep their progress.
 ### Figures
 
 - **Add Skylander** (no file explorer needed):
-  - **Your Skylanders:** every figure you've played, with level, gold, nickname, the villain in a trap, when it was last played, and its backup. **Load current** loads its copy, **Load backup** its backup.
+  - **Yours:** every figure you've played, with level, gold, nickname, the villain in a trap, when it was last played, and its backup. **Put on portal** loads its copy, **Put backup on portal** its backup.
   - **All Skylanders:** 591 figures, the Imaginators Senseis and the Creation Crystals included, with game and element, plus a count per game of the ones you own. **Create new figure** makes a blank file figure, fresh out of the box, like Dolphin and RPCS3 do.
-  - **Teams:** **Save portal as team…** keeps the figures now on the virtual portal under a name. **Load team** puts them all back at once. **Edit…** renames a team, takes figures out or adds the ones on the portal now, and a missing file is marked.
+  - **Teams:** **Save the portal as a team…** keeps the figures now on the virtual portal under a name. **Put team on portal** puts them all back at once. **Edit…** renames a team, takes figures out or adds the ones on the portal now, and a missing file is marked.
   - **Swapper halves come together:** loading or creating one half of a Swap Force Swapper also brings its other half, unless a half of that kind is on the portal already.
   - **What you have:** the **YOU HAVE** column says **✓ Physical** (a real figure, read from your real portal) or **On PC** (a file figure: created or imported). The count ("You own 4 of 591") only counts real figures.
   - **Favourites:** **★ Favourite** puts a ★ before a figure's name, in both lists, and the **Favourites** filter shows only those.
-  - **Pictures (optional):** click **Get pictures…** in Add Skylander to download pictures of all figures (about 13 MB) from [portalsync-pictures](https://github.com/rhsts/portalsync-pictures). Add Skylander then gets a **Table / Pictures** switch. The pictures are kept apart from this repository, because the artwork belongs to Activision. You can also use your own: a `thumbnails` folder next to `PortalSync.exe` with `<figure ID>_<variant>.png` files (for example `25_0.png` for Zook).
+  - **Pictures (optional):** click **Get pictures…** in Add Skylander to download pictures of all figures (about 13 MB) from [portalsync-pictures](https://github.com/rhsts/portalsync-pictures). Add Skylander then gets a **List / Pictures** switch, and the main window shows each figure's picture (turn **Show figure pictures** off in Settings for a coloured element dot instead). The pictures are kept apart from this repository, because the artwork belongs to Activision. You can also use your own: a `thumbnails` folder next to `PortalSync.exe` with `<figure ID>_<variant>.png` files (for example `25_0.png` for Zook).
   - **Search** by name, ID, game or element, and **filter** by game, element and what you have. Click a game in the "You own … of …" line to filter on it, and click a column heading to sort.
-  - **Browse files…** for any other `.sky` file, or **drag and drop** `.sky` files onto the window.
+  - **Open a .sky file…** for any other `.sky` file, or **drag and drop** `.sky` files onto the window.
 - **Details** in the main window: level and gold, or "holds Bad Juju" for a trap.
 - **Details panel** under the list: click a figure to see its ID, level and gold, where its saves are and what that means, its file and its backup.
 - **Imaginators:** real Senseis and Creation Crystals are named and work as usual. A *created* Imaginators figure needs a patch, because the game checks a signature that only factory-made figures have: in Cemu, turn on the *Signature Patch* graphic pack (Skylanders Imaginators → Mods). RPCS3 has no such patch yet.
@@ -183,9 +183,9 @@ Your real figures keep their progress.
   - **⚠ Not saved to disk:** Windows couldn't write the figure's file. PortalSync keeps the progress in memory and keeps trying.
 - **Backups** in the figures folder, named after the character, for example `Zook (86bc1263) - original.sky`.
   - **Kinds:** `original` is the first copy PortalSync made of a figure. `saved <time>` is the copy from your PC, kept because it differed from the figure when you placed it. `before restore <time>` is what a figure held just before a restore, repair, reset or edit wrote to it.
-  - **How many:** `original` always stays. Besides it, one per figure by default, the newest. Set **Backups per figure** in Settings to keep 1 to 10. Older ones go to the Recycle Bin, never straight to deletion.
+  - **How many:** `original` always stays. Besides it, one per figure by default, the newest. Set **Backups kept per figure** in Settings to keep 1 to 10. Older ones go to the Recycle Bin, never straight to deletion.
   - An empty, cut-off or damaged copy never replaces an intact backup.
-  - **Daily backup zip:** once a day, every figure file goes into `dumps\daily backups\Skylanders <date>.zip`. The last 7 are kept.
+  - **Daily backup:** once a day, every figure file goes into `dumps\daily backups\Skylanders <date>.zip`. The last 7 are kept.
 - **Progress history:** PortalSync notes a Skylander's level and gold each time they change (`dumps\progress.csv`). Right-click a figure → **Progress history…** shows them as a list and a chart, together with its backups.
 - **Backups:** right-click a figure → **Backups…** lists its backups, newest first, with level, gold, nickname and how each compares with the figure ("more progress: level 12 (the figure: 11)"). **Put on figure** restores one: it writes the backup onto the real figure, and says which way it goes before it does.
 - **Restore progress:** when you place a figure and the copy on your PC differs from it, a pop-up offers to restore that copy: to write it onto the figure. This happens after you played with **Write saves to real figures** off, or after the figure was played somewhere else, such as on a console. The pop-up says whether the copy has more or less progress than the figure, and nothing is written unless you click **Write to figure**. What the figure held is kept as its backup, so a restore can be undone.
